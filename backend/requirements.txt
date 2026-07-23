@@ -1,0 +1,6 @@
+Django>=4.2,<5.0
+djangorestframework>=3.14
+django-cors-headers>=4.3
+psycopg2-binary>=2.9
+weasyprint>=60.0
+python-docx>=1.1.0

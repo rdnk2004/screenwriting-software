@@ -1,0 +1,153 @@
+/* Minimal reset + screenplay page feel */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "Courier New", Courier, monospace;
+  background: #1a1a1a;
+  color: #e8e8e8;
+  min-height: 100vh;
+}
+
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; }
+
+/* Screenplay page */
+.screenplay-page {
+  background: #fff;
+  color: #000;
+  width: 8.5in;
+  min-height: 11in;
+  margin: 2rem auto;
+  padding: 1in 1.5in 1in 1.5in;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.5);
+}
+
+/* Script list */
+.list-container {
+  max-width: 700px;
+  margin: 3rem auto;
+  padding: 1rem;
+}
+.list-container h1 {
+  font-size: 1.8rem;
+  margin-bottom: 1.5rem;
+  font-family: Georgia, serif;
+}
+.script-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border: 1px solid #333;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  background: #222;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.script-item:hover { background: #2a2a2a; }
+.script-item .title { font-size: 1rem; }
+.script-item .date { font-size: 0.75rem; color: #888; }
+
+.btn {
+  padding: 0.5rem 1.2rem;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background: #333;
+  color: #e8e8e8;
+  font-size: 0.9rem;
+  transition: background 0.15s;
+}
+.btn:hover { background: #444; }
+.btn-primary {
+  background: #4a7fa5;
+  border-color: #4a7fa5;
+  color: #fff;
+}
+.btn-primary:hover { background: #3a6f95; }
+
+/* Editor layout */
+.editor-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: #111;
+  border-bottom: 1px solid #333;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.editor-toolbar .script-title-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #555;
+  color: #e8e8e8;
+  font-size: 1rem;
+  font-family: Georgia, serif;
+  padding: 0.2rem 0.4rem;
+  outline: none;
+  min-width: 200px;
+}
+.editor-toolbar .status {
+  font-size: 0.75rem;
+  color: #888;
+  margin-left: auto;
+}
+.editor-scroll {
+  flex: 1;
+  overflow-y: auto;
+  background: #1a1a1a;
+}
+
+/* CodeMirror overrides */
+.cm-editor {
+  height: 100%;
+}
+.cm-editor .cm-content {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12pt;
+  background: #fff;
+  color: #000;
+  width: 8.5in;
+  min-height: 11in;
+  margin: 2rem auto;
+  padding: 1in 1.5in 1in 1in;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.5);
+}
+.cm-editor .cm-line { padding: 0; line-height: 1.6; }
+.cm-editor.cm-focused { outline: none; }
+.cm-editor .cm-scroller { background: #1a1a1a; }
+
+/* Fountain element styles */
+.fountain-scene-heading {
+  text-transform: uppercase;
+  font-weight: bold;
+  margin-top: 2em;
+}
+.fountain-character {
+  text-transform: uppercase;
+  margin-left: 2.2in;
+  margin-top: 1em;
+}
+.fountain-dialogue {
+  margin-left: 1.5in;
+  margin-right: 1.5in;
+}
+.fountain-parenthetical {
+  margin-left: 1.8in;
+  margin-right: 2in;
+}
+.fountain-transition {
+  text-transform: uppercase;
+  text-align: right;
+  margin-top: 1em;
+}
+.fountain-action {
+  margin-top: 1em;
+}

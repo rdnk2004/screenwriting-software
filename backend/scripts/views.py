@@ -4,7 +4,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import Script, Scene, Line, Character, Relationship
+from .models import Script, Scene, Line, Character, Relationship, Beat
 from .serializers import (
     LineSerializer,
     SceneWriteSerializer,
@@ -12,6 +12,7 @@ from .serializers import (
     ScriptDetailSerializer,
     CharacterSerializer,
     RelationshipSerializer,
+    BeatSerializer,
     normalize_character_name,
 )
 from .fountain import parse_fountain, serialize_to_fountain
@@ -182,6 +183,116 @@ class ScriptViewSet(viewsets.ModelViewSet):
         serializer = CharacterSerializer(characters, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=["get"], url_path="analysis")
+    def analysis(self, request, pk=None):
+        """
+        Return script analysis statistics:
+        - dialogue balance per character (% and line counts)
+        - page/scene count per act / beat grouping
+        - location list with scene counts
+        - most and least active characters
+        """
+        script = self.get_object()
+        scenes = script.scenes.all().order_by("order")
+        total_scenes = scenes.count()
+
+        all_lines = Line.objects.filter(scene__script=script)
+        total_lines_count = all_lines.count()
+        estimated_total_pages = round(total_lines_count / 54.0, 1) if total_lines_count > 0 else 0.0
+
+        # 1. Dialogue balance per character
+        dialogue_lines = all_lines.filter(type=Line.LineType.CHARACTER)
+        dialogue_counts = {}
+        total_dialogue_lines = 0
+        for d_line in dialogue_lines:
+            norm_name = normalize_character_name(d_line.text)
+            if norm_name:
+                dialogue_counts[norm_name] = dialogue_counts.get(norm_name, 0) + 1
+                total_dialogue_lines += 1
+
+        dialogue_balance = []
+        for name, cnt in sorted(dialogue_counts.items(), key=lambda x: x[1], reverse=True):
+            pct = round((cnt / total_dialogue_lines) * 100.0, 1) if total_dialogue_lines > 0 else 0.0
+            dialogue_balance.append({
+                "character": name.title(),
+                "dialogue_lines": cnt,
+                "percentage": pct
+            })
+
+        # 2. Location list with scene counts
+        locations_map = {}
+        for s in scenes:
+            loc = (s.location or "").strip().upper() or "UNKNOWN"
+            locations_map[loc] = locations_map.get(loc, 0) + 1
+
+        location_list = [
+            {"location": loc, "scene_count": cnt}
+            for loc, cnt in sorted(locations_map.items(), key=lambda x: x[1], reverse=True)
+        ]
+
+        # 3. Beat / Act Structure Breakdown
+        beats = script.beats.all().order_by("order")
+        beat_breakdown = []
+        scenes_list = list(scenes)
+        scene_order_map = {s.order: i for i, s in enumerate(scenes_list)}
+
+        beats_list = list(beats)
+        for i, beat in enumerate(beats_list):
+            linked_scene_idx = scene_order_map.get(beat.linked_scene.order) if beat.linked_scene else None
+            
+            next_linked_idx = None
+            for next_beat in beats_list[i + 1:]:
+                if next_beat.linked_scene and next_beat.linked_scene.order in scene_order_map:
+                    next_linked_idx = scene_order_map[next_beat.linked_scene.order]
+                    break
+
+            if linked_scene_idx is not None:
+                end_idx = next_linked_idx if next_linked_idx is not None else len(scenes_list)
+                section_scenes = scenes_list[linked_scene_idx:end_idx]
+                sec_scene_count = len(section_scenes)
+                sec_lines = Line.objects.filter(scene__in=section_scenes).count()
+                sec_pages = round(sec_lines / 54.0, 1)
+            else:
+                sec_scene_count = 0
+                sec_pages = 0.0
+
+            beat_breakdown.append({
+                "id": beat.id,
+                "name": beat.name,
+                "order": beat.order,
+                "linked_scene_id": beat.linked_scene.id if beat.linked_scene else None,
+                "linked_scene_heading": beat.linked_scene.heading if beat.linked_scene else None,
+                "scene_count": sec_scene_count,
+                "estimated_pages": sec_pages
+            })
+
+        # 4. Most / Least active characters
+        character_stats = []
+        for char in script.characters.all():
+            serializer = CharacterSerializer(char)
+            character_stats.append({
+                "id": char.id,
+                "name": char.name,
+                "scene_count": serializer.data["scene_count"],
+                "dialogue_line_count": serializer.data["dialogue_line_count"]
+            })
+
+        sorted_by_activity = sorted(character_stats, key=lambda x: (x["scene_count"], x["dialogue_line_count"]), reverse=True)
+        most_active = sorted_by_activity[:3]
+        least_active = sorted_by_activity[-3:] if len(sorted_by_activity) > 3 else []
+
+        return Response({
+            "total_scenes": total_scenes,
+            "total_dialogue_lines": total_dialogue_lines,
+            "total_lines": total_lines_count,
+            "estimated_total_pages": estimated_total_pages,
+            "dialogue_balance": dialogue_balance,
+            "beat_breakdown": beat_breakdown,
+            "locations": location_list,
+            "most_active_characters": most_active,
+            "least_active_characters": least_active
+        })
+
 
 # ---------------------------------------------------------------------------
 # Scene ViewSet
@@ -241,3 +352,18 @@ class RelationshipViewSet(viewsets.ModelViewSet):
         if script_id:
             qs = qs.filter(script_id=script_id)
         return qs
+
+
+# ---------------------------------------------------------------------------
+# Beat ViewSet
+# ---------------------------------------------------------------------------
+
+class BeatViewSet(viewsets.ModelViewSet):
+    serializer_class = BeatSerializer
+
+    def get_queryset(self):
+        qs = Beat.objects.all()
+        script_id = self.request.query_params.get("script")
+        if script_id:
+            qs = qs.filter(script_id=script_id)
+        return qs.order_by("order")

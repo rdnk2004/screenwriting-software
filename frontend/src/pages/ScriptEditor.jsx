@@ -164,6 +164,20 @@ export default function ScriptEditor() {
           🕸️ Map
         </button>
 
+        <button
+          className="btn"
+          onClick={() => navigate(`/scripts/${id}/outline`)}
+        >
+          📋 Outline
+        </button>
+
+        <button
+          className="btn"
+          onClick={() => navigate(`/scripts/${id}/analysis`)}
+        >
+          📊 Analysis
+        </button>
+
         {status && <span className="status">{status}</span>}
 
         <span className="status" style={{ marginLeft: 0 }}>

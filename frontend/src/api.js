@@ -117,3 +117,21 @@ export const updateRelationship = (id, data) =>
   api.patch(`/relationships/${id}/`, data).then((r) => r.data);
 
 export const deleteRelationship = (id) => api.delete(`/relationships/${id}/`);
+
+// ---- Beats & Outline ------------------------------------------------------
+
+export const listBeats = (scriptId) =>
+  api.get(`/beats/?script=${scriptId}`).then((r) => r.data);
+
+export const createBeat = (data) =>
+  api.post("/beats/", data).then((r) => r.data);
+
+export const updateBeat = (id, data) =>
+  api.patch(`/beats/${id}/`, data).then((r) => r.data);
+
+export const deleteBeat = (id) => api.delete(`/beats/${id}/`);
+
+// ---- Script Analysis ------------------------------------------------------
+
+export const getScriptAnalysis = (scriptId) =>
+  api.get(`/scripts/${scriptId}/analysis/`).then((r) => r.data);

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 import re
-from .models import Script, Scene, Line, Character, Relationship
+from .models import Script, Scene, Line, Character, Relationship, Beat
 
 
 def normalize_character_name(text: str) -> str:
@@ -180,4 +180,21 @@ class RelationshipSerializer(serializers.ModelSerializer):
             "label",
             "type",
             "notes",
+        ]
+
+
+class BeatSerializer(serializers.ModelSerializer):
+    linked_scene_heading = serializers.ReadOnlyField(source="linked_scene.heading")
+    linked_scene_order = serializers.ReadOnlyField(source="linked_scene.order")
+
+    class Meta:
+        model = Beat
+        fields = [
+            "id",
+            "script",
+            "name",
+            "order",
+            "linked_scene",
+            "linked_scene_heading",
+            "linked_scene_order",
         ]

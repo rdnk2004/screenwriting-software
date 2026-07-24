@@ -106,3 +106,20 @@ class Relationship(models.Model):
 
     def __str__(self):
         return f"{self.character_a.name} -> {self.character_b.name} ({self.label})"
+
+
+class Beat(models.Model):
+    script = models.ForeignKey(
+        Script, on_delete=models.CASCADE, related_name="beats"
+    )
+    name = models.CharField(max_length=255)
+    order = models.IntegerField(default=0)
+    linked_scene = models.ForeignKey(
+        Scene, on_delete=models.SET_NULL, null=True, blank=True, related_name="beats"
+    )
+
+    class Meta:
+        ordering = ["order"]
+
+    def __str__(self):
+        return f"{self.order}. {self.name} ({self.script.title})"

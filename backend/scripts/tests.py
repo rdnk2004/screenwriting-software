@@ -187,3 +187,46 @@ class ScreenwriterAPITests(APITestCase):
         rel = Relationship.objects.first()
         self.assertEqual(rel.label, "Rivals")
         self.assertEqual(rel.type, "rival")
+
+    def test_beat_crud(self):
+        from .models import Beat
+        script = Script.objects.create(title="Beat Test", owner=self.user)
+        scene = Scene.objects.create(script=script, order=0, heading="INT. COFFEE SHOP - DAY")
+
+        url = reverse("beat-list")
+        res = self.client.post(url, {
+            "script": script.pk,
+            "name": "Opening Image",
+            "order": 1,
+            "linked_scene": scene.pk
+        }, format="json")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Beat.objects.filter(script=script).count(), 1)
+
+        beat = Beat.objects.first()
+        self.assertEqual(beat.name, "Opening Image")
+        self.assertEqual(beat.linked_scene, scene)
+
+    def test_script_analysis(self):
+        script = Script.objects.create(title="Analysis Test", owner=self.user)
+        scene1 = Scene.objects.create(script=script, order=0, heading="INT. CAFE - DAY", location="CAFE")
+        Line.objects.create(scene=scene1, order=0, type="scene_heading", text="INT. CAFE - DAY")
+        Line.objects.create(scene=scene1, order=1, type="character", text="BOB")
+        Line.objects.create(scene=scene1, order=2, type="dialogue", text="Hello Alice.")
+        Line.objects.create(scene=scene1, order=3, type="character", text="ALICE")
+        Line.objects.create(scene=scene1, order=4, type="dialogue", text="Hi Bob!")
+
+        scene2 = Scene.objects.create(script=script, order=1, heading="EXT. PARK - DAY", location="PARK")
+        Line.objects.create(scene=scene2, order=0, type="scene_heading", text="EXT. PARK - DAY")
+        Line.objects.create(scene=scene2, order=1, type="character", text="BOB")
+        Line.objects.create(scene=scene2, order=2, type="dialogue", text="Nice park.")
+
+        url = reverse("script-analysis", kwargs={"pk": script.pk})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        data = res.json()
+
+        self.assertEqual(data["total_scenes"], 2)
+        self.assertEqual(data["total_dialogue_lines"], 3)
+        self.assertEqual(len(data["locations"]), 2)
+        self.assertEqual(len(data["dialogue_balance"]), 2)

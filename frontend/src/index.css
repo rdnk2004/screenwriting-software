@@ -1,153 +1,412 @@
-/* Minimal reset + screenplay page feel */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* ---------------------------------------------------------------------------
+ * Screenwriting Software — Design System & Global Styles
+ * Rules:
+ *   - Modern UI Typeface (Inter / system-ui) for Dashboard, Modals, Toolbars
+ *   - Screenplay Typewriter Font ('Courier Prime' / 'Courier New') STRICTLY isolated
+ *     to the screenplay paper document (.screenplay-paper / .cm-content)
+ * --------------------------------------------------------------------------- */
+
+@import url('https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg-dark: #090d16;
+  --bg-card: #0f172a;
+  --bg-surface: #1e293b;
+  --border-color: #334155;
+  --accent-blue: #38bdf8;
+  --accent-blue-hover: #0284c7;
+  --accent-teal: #4ecdc4;
+  --accent-rose: #ff85a1;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --shadow-main: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  --shadow-paper: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
 
 body {
-  font-family: "Courier New", Courier, monospace;
-  background: #1a1a1a;
-  color: #e8e8e8;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
   min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-a { color: inherit; text-decoration: none; }
-button { cursor: pointer; }
-
-/* Screenplay page */
-.screenplay-page {
-  background: #fff;
-  color: #000;
-  width: 8.5in;
-  min-height: 11in;
-  margin: 2rem auto;
-  padding: 1in 1.5in 1in 1.5in;
-  box-shadow: 0 4px 32px rgba(0,0,0,0.5);
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
-/* Script list */
-.list-container {
-  max-width: 700px;
-  margin: 3rem auto;
-  padding: 1rem;
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
 }
-.list-container h1 {
-  font-size: 1.8rem;
-  margin-bottom: 1.5rem;
-  font-family: Georgia, serif;
+
+/* ---------------------------------------------------------------------------
+ * Dashboard & General Layouts
+ * --------------------------------------------------------------------------- */
+
+.dashboard-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
 }
-.script-item {
+
+.dashboard-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.75rem 1rem;
-  border: 1px solid #333;
-  border-radius: 4px;
-  margin-bottom: 0.5rem;
-  background: #222;
-  cursor: pointer;
-  transition: background 0.15s;
+  margin-bottom: 2rem;
 }
-.script-item:hover { background: #2a2a2a; }
-.script-item .title { font-size: 1rem; }
-.script-item .date { font-size: 0.75rem; color: #888; }
 
-.btn {
-  padding: 0.5rem 1.2rem;
-  border: 1px solid #555;
-  border-radius: 4px;
-  background: #333;
-  color: #e8e8e8;
+.dashboard-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dashboard-subtitle {
   font-size: 0.9rem;
-  transition: background 0.15s;
+  color: var(--text-secondary);
+  margin-top: 0.2rem;
 }
-.btn:hover { background: #444; }
-.btn-primary {
-  background: #4a7fa5;
-  border-color: #4a7fa5;
-  color: #fff;
-}
-.btn-primary:hover { background: #3a6f95; }
 
-/* Editor layout */
+/* Overview Stat Cards */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow-main);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-blue);
+}
+
+.stat-card .label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.stat-card .value {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  margin-top: 0.4rem;
+}
+
+/* Controls Bar (Search, Filter, Actions) */
+.controls-bar {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 250px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.search-input:focus {
+  border-color: var(--accent-blue);
+}
+
+/* Grid of Scripts */
+.scripts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.script-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.script-card:hover {
+  border-color: var(--accent-blue);
+  box-shadow: 0 8px 25px -5px rgba(56, 189, 248, 0.15);
+  transform: translateY(-2px);
+}
+
+.script-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+
+.script-card-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.6rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(56, 189, 248, 0.1);
+  color: var(--accent-blue);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.script-card-meta {
+  display: flex;
+  gap: 1.2rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 1.25rem;
+}
+
+.script-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  transition: all 0.15s ease;
+}
+
+.btn:hover {
+  background: #2d3748;
+  border-color: #475569;
+}
+
+.btn-primary {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  background: var(--accent-blue-hover);
+  border-color: var(--accent-blue-hover);
+}
+
+.btn-danger {
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+}
+
+/* Modal & Drag-and-Drop Dropzone */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease;
+}
+
+.modal-content {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  width: 540px;
+  max-width: 92vw;
+  padding: 2rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+}
+
+.dropzone {
+  border: 2px dashed var(--border-color);
+  border-radius: 12px;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  background: var(--bg-dark);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin: 1.25rem 0;
+}
+
+.dropzone:hover, .dropzone.active {
+  border-color: var(--accent-blue);
+  background: rgba(56, 189, 248, 0.05);
+}
+
+/* ---------------------------------------------------------------------------
+ * Screenplay Editor (STRICT Font Isolation)
+ * --------------------------------------------------------------------------- */
+
 .editor-layout {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  background: #090d16;
 }
+
 .editor-toolbar {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 0.5rem 1rem;
-  background: #111;
-  border-bottom: 1px solid #333;
+  gap: 0.75rem;
+  padding: 0.6rem 1.25rem;
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
   position: sticky;
   top: 0;
   z-index: 10;
+  font-family: 'Inter', sans-serif;
 }
-.editor-toolbar .script-title-input {
+
+.script-title-input {
   background: transparent;
   border: none;
-  border-bottom: 1px solid #555;
-  color: #e8e8e8;
-  font-size: 1rem;
-  font-family: Georgia, serif;
-  padding: 0.2rem 0.4rem;
+  border-bottom: 1px solid #334155;
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  padding: 0.25rem 0.5rem;
   outline: none;
-  min-width: 200px;
+  min-width: 220px;
+  transition: border-color 0.2s;
 }
-.editor-toolbar .status {
-  font-size: 0.75rem;
-  color: #888;
-  margin-left: auto;
+
+.script-title-input:focus {
+  border-color: var(--accent-blue);
 }
+
 .editor-scroll {
   flex: 1;
   overflow-y: auto;
-  background: #1a1a1a;
+  background: #090d16;
+  padding: 2rem 1rem;
 }
 
-/* CodeMirror overrides */
+/* CodeMirror Paper Element (STRICT Courier Prime / New Font) */
 .cm-editor {
   height: 100%;
 }
+
+.cm-editor .cm-scroller {
+  background: #090d16;
+}
+
 .cm-editor .cm-content {
-  font-family: "Courier New", Courier, monospace;
-  font-size: 12pt;
-  background: #fff;
-  color: #000;
+  font-family: 'Courier Prime', 'Courier New', Courier, monospace !important;
+  font-size: 12pt !important;
+  background: #ffffff !important;
+  color: #000000 !important;
   width: 8.5in;
   min-height: 11in;
-  margin: 2rem auto;
+  margin: 0 auto;
   padding: 1in 1.5in 1in 1in;
-  box-shadow: 0 4px 32px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-paper);
+  border-radius: 2px;
 }
-.cm-editor .cm-line { padding: 0; line-height: 1.6; }
-.cm-editor.cm-focused { outline: none; }
-.cm-editor .cm-scroller { background: #1a1a1a; }
 
-/* Fountain element styles */
+.cm-editor .cm-line {
+  padding: 0;
+  line-height: 1.6;
+}
+
+.cm-editor.cm-focused {
+  outline: none;
+}
+
+/* Fountain element styles inside paper */
 .fountain-scene-heading {
   text-transform: uppercase;
   font-weight: bold;
-  margin-top: 2em;
+  margin-top: 1.8em;
 }
+
 .fountain-character {
   text-transform: uppercase;
   margin-left: 2.2in;
   margin-top: 1em;
 }
+
 .fountain-dialogue {
   margin-left: 1.5in;
   margin-right: 1.5in;
 }
+
 .fountain-parenthetical {
   margin-left: 1.8in;
   margin-right: 2in;
 }
+
 .fountain-transition {
   text-transform: uppercase;
   text-align: right;
   margin-top: 1em;
 }
+
 .fountain-action {
   margin-top: 1em;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
 }

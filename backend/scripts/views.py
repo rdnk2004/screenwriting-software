@@ -26,6 +26,9 @@ from .fountain import parse_fountain, serialize_to_fountain
 from .exporter import export_script_to_pdf, export_script_to_word
 
 
+from .upload import create_script_from_upload
+
+
 def _get_default_user():
     """Return (or create) the single default admin user."""
     user, _ = User.objects.get_or_create(
@@ -49,6 +52,35 @@ class ScriptViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(owner=_get_default_user())
+
+    @action(detail=False, methods=["post"], url_path="upload")
+    def upload(self, request):
+        """
+        Upload a screenplay file (.fountain, .txt, .docx) to create a new Script.
+        Form-data: 'file' (required), 'title' (optional)
+        """
+        uploaded_file = request.FILES.get("file")
+        if not uploaded_file:
+            return Response(
+                {"detail": "No file was uploaded in request."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        title = request.data.get("title", "")
+        try:
+            script = create_script_from_upload(
+                user=_get_default_user(),
+                title=title,
+                file_obj=uploaded_file,
+                filename=uploaded_file.name,
+            )
+            serializer = ScriptDetailSerializer(script)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as exc:
+            return Response(
+                {"detail": f"Upload processing failed: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     # ------------------------------------------------------------------
     # Extra actions: Fountain import / export
@@ -310,6 +342,96 @@ class ScriptViewSet(viewsets.ModelViewSet):
             "locations": location_list,
             "most_active_characters": most_active,
             "least_active_characters": least_active
+        })
+
+    @action(detail=True, methods=["get"], url_path="extraction")
+    def extraction(self, request, pk=None):
+        """
+        Script Extraction Engine:
+        Analyzes screenplay text to extract dialogue lines per character,
+        character co-appearance in scenes, and dialogue exchange connections.
+        """
+        script = self.get_object()
+        scenes = script.scenes.prefetch_related("lines").all().order_by("order")
+
+        extracted_lines = []
+        character_scene_map = {}  # char_norm -> set(scene_ids)
+        character_dialogue_map = {}  # char_norm -> list of line dicts
+        character_exchanges = {}  # (char_a, char_b) -> exchange_count
+
+        for scene in scenes:
+            scene_chars = set()
+            last_speaker = None
+            lines = list(scene.lines.all().order_by("order"))
+
+            for i, line in enumerate(lines):
+                if line.type == Line.LineType.CHARACTER:
+                    speaker = normalize_character_name(line.text)
+                    if speaker:
+                        scene_chars.add(speaker)
+
+                        # Look ahead for dialogue text
+                        dialogue_text = ""
+                        for j in range(i + 1, len(lines)):
+                            next_line = lines[j]
+                            if next_line.type == Line.LineType.DIALOGUE:
+                                dialogue_text += (" " if dialogue_text else "") + next_line.text.strip()
+                            elif next_line.type == Line.LineType.PARENTHETICAL:
+                                continue
+                            else:
+                                break
+
+                        item = {
+                            "scene_id": scene.id,
+                            "scene_order": scene.order + 1,
+                            "scene_heading": scene.heading or f"Scene {scene.order + 1}",
+                            "character": speaker.title(),
+                            "dialogue": dialogue_text,
+                            "line_order": line.order,
+                        }
+                        extracted_lines.append(item)
+
+                        if speaker not in character_dialogue_map:
+                            character_dialogue_map[speaker] = []
+                        character_dialogue_map[speaker].append(item)
+
+                        # Track dialogue exchange connection with previous speaker
+                        if last_speaker and last_speaker != speaker:
+                            pair = tuple(sorted([last_speaker, speaker]))
+                            character_exchanges[pair] = character_exchanges.get(pair, 0) + 1
+
+                        last_speaker = speaker
+
+            for speaker in scene_chars:
+                if speaker not in character_scene_map:
+                    character_scene_map[speaker] = set()
+                character_scene_map[speaker].add(scene.id)
+
+        # Build co-appearance & exchange matrix
+        all_speakers = sorted(character_scene_map.keys())
+        connections = []
+        for i in range(len(all_speakers)):
+            for j in range(i + 1, len(all_speakers)):
+                char_a = all_speakers[i]
+                char_b = all_speakers[j]
+                shared_scenes = len(
+                    character_scene_map[char_a].intersection(character_scene_map[char_b])
+                )
+                exchanges = character_exchanges.get(tuple(sorted([char_a, char_b])), 0)
+
+                if shared_scenes > 0 or exchanges > 0:
+                    connections.append({
+                        "character_a": char_a.title(),
+                        "character_b": char_b.title(),
+                        "shared_scenes": shared_scenes,
+                        "dialogue_exchanges": exchanges,
+                    })
+
+        return Response({
+            "total_extracted_lines": len(extracted_lines),
+            "total_characters": len(all_speakers),
+            "connections": connections,
+            "extracted_lines": extracted_lines,
         })
 
 

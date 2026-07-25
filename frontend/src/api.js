@@ -19,6 +19,17 @@ export const updateScriptTitle = (id, title) =>
 
 export const deleteScript = (id) => api.delete(`/scripts/${id}/`);
 
+export const uploadScriptFile = (file, title = "") => {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (title) formData.append("title", title);
+  return api
+    .post("/scripts/upload/", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+    .then((r) => r.data);
+};
+
 // ---- Fountain import/export ------------------------------------------------
 
 /**
@@ -131,7 +142,10 @@ export const updateBeat = (id, data) =>
 
 export const deleteBeat = (id) => api.delete(`/beats/${id}/`);
 
-// ---- Script Analysis ------------------------------------------------------
+// ---- Script Analysis & Extraction -----------------------------------------
 
 export const getScriptAnalysis = (scriptId) =>
   api.get(`/scripts/${scriptId}/analysis/`).then((r) => r.data);
+
+export const getScriptExtraction = (scriptId) =>
+  api.get(`/scripts/${scriptId}/extraction/`).then((r) => r.data);

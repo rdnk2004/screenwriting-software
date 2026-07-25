@@ -272,6 +272,29 @@ function smartEnter(view) {
   return true;
 }
 
+export function setSpecificLineType(view, targetType) {
+  const { state } = view;
+  const sel = state.selection.main;
+  const lineNo = state.doc.lineAt(sel.head).number;
+  view.dispatch({
+    effects: setLineTypeEffect.of({ line: lineNo, type: targetType }),
+  });
+  return true;
+}
+
+export function toggleUppercaseCurrentLine(view) {
+  const { state } = view;
+  const sel = state.selection.main;
+  const lineObj = state.doc.lineAt(sel.head);
+  const upper = lineObj.text.toUpperCase();
+  if (upper !== lineObj.text) {
+    view.dispatch({
+      changes: { from: lineObj.from, to: lineObj.to, insert: upper },
+    });
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Combined extension export
 // ---------------------------------------------------------------------------
@@ -283,5 +306,12 @@ export const fountainExtension = [
   keymap.of([
     { key: "Tab", run: cycleType },
     { key: "Enter", run: smartEnter },
+    { key: "Ctrl-Alt-1", run: (v) => setSpecificLineType(v, "scene_heading") },
+    { key: "Ctrl-Alt-2", run: (v) => setSpecificLineType(v, "action") },
+    { key: "Ctrl-Alt-3", run: (v) => setSpecificLineType(v, "character") },
+    { key: "Ctrl-Alt-4", run: (v) => setSpecificLineType(v, "dialogue") },
+    { key: "Ctrl-Alt-5", run: (v) => setSpecificLineType(v, "parenthetical") },
+    { key: "Ctrl-Alt-6", run: (v) => setSpecificLineType(v, "transition") },
+    { key: "Ctrl-Shift-u", run: toggleUppercaseCurrentLine },
   ]),
 ];

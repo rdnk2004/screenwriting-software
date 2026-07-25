@@ -1,19 +1,17 @@
-/**
- * FountainEditor.jsx
- *
- * A controlled CodeMirror 6 editor pre-configured with the Fountain extension.
- * Props:
- *   initialDoc  — initial Fountain text string
- *   onChange    — called with the full text whenever the document changes
- */
 import { useEffect, useRef } from "react";
 import { EditorState } from "@codemirror/state";
 import { EditorView, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { history, historyKeymap } from "@codemirror/commands";
 import { keymap as keymapFacet } from "@codemirror/view";
-import { fountainExtension } from "./fountainMode.js";
+import { fountainExtension, getLineType } from "./fountainMode.js";
 
-export default function FountainEditor({ initialDoc = "", onChange }) {
+export default function FountainEditor({
+  initialDoc = "",
+  onChange,
+  onCursorChange,
+  onInitView,
+  zoom = 1,
+}) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
 
@@ -32,6 +30,16 @@ export default function FountainEditor({ initialDoc = "", onChange }) {
           if (update.docChanged && onChange) {
             onChange(update.state.doc.toString());
           }
+          if (onCursorChange) {
+            const { state } = update.view;
+            const sel = state.selection.main;
+            const lineNo = state.doc.lineAt(sel.head).number;
+            const lineType = getLineType(state, lineNo);
+            const text = state.doc.toString();
+            const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+            const lines = state.doc.lines;
+            onCursorChange({ lineNo, lineType, words, lines });
+          }
         }),
         EditorView.theme({
           "&": { height: "100%" },
@@ -46,10 +54,12 @@ export default function FountainEditor({ initialDoc = "", onChange }) {
     });
 
     viewRef.current = view;
+    if (onInitView) onInitView(view);
 
     return () => {
       view.destroy();
       viewRef.current = null;
+      if (onInitView) onInitView(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // only mount once
@@ -72,7 +82,13 @@ export default function FountainEditor({ initialDoc = "", onChange }) {
   return (
     <div
       ref={containerRef}
-      style={{ height: "100%", overflow: "auto" }}
+      style={{
+        height: "100%",
+        overflow: "auto",
+        transform: `scale(${zoom})`,
+        transformOrigin: "top center",
+        transition: "transform 0.15s ease-out",
+      }}
     />
   );
 }

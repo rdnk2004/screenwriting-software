@@ -148,11 +148,33 @@ class CharacterSerializer(serializers.ModelSerializer):
 
 
 class ScriptListSerializer(serializers.ModelSerializer):
-    """Lightweight serializer for the script list (no nested data)."""
+    """Lightweight serializer for the script list with statistics."""
+
+    scene_count = serializers.SerializerMethodField()
+    estimated_pages = serializers.SerializerMethodField()
+    character_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Script
-        fields = ["id", "title", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "title",
+            "created_at",
+            "updated_at",
+            "scene_count",
+            "estimated_pages",
+            "character_count",
+        ]
+
+    def get_scene_count(self, obj):
+        return obj.scenes.count()
+
+    def get_estimated_pages(self, obj):
+        line_count = Line.objects.filter(scene__script=obj).count()
+        return round(line_count / 54.0, 1) if line_count > 0 else 0.0
+
+    def get_character_count(self, obj):
+        return obj.characters.count()
 
 
 class ScriptDetailSerializer(serializers.ModelSerializer):

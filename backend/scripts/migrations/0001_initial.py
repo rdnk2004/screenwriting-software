@@ -1,4 +1,6 @@
+# pyrefly: ignore [missing-import]
 from django.db import migrations, models
+# pyrefly: ignore [missing-import]
 import django.db.models.deletion
 
 

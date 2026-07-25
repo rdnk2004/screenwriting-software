@@ -54,12 +54,15 @@ export default function FountainEditor({ initialDoc = "", onChange }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // only mount once
 
+  const loadedDocRef = useRef(initialDoc);
+
   // If initialDoc changes externally (e.g. after load), replace document
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
     const current = view.state.doc.toString();
-    if (current !== initialDoc) {
+    if (initialDoc !== loadedDocRef.current && current !== initialDoc) {
+      loadedDocRef.current = initialDoc;
       view.dispatch({
         changes: { from: 0, to: current.length, insert: initialDoc },
       });

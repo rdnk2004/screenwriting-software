@@ -1,7 +1,14 @@
+# pyrefly: ignore [missing-import]
 from django.contrib.auth.models import User
+# pyrefly: ignore [missing-import]
 from django.http import HttpResponse
+# pyrefly: ignore [missing-import]
+from django.utils import timezone
+# pyrefly: ignore [missing-import]
 from rest_framework import viewsets, status
+# pyrefly: ignore [missing-import]
 from rest_framework.decorators import action
+# pyrefly: ignore [missing-import]
 from rest_framework.response import Response
 
 from .models import Script, Scene, Line, Character, Relationship, Beat
@@ -77,12 +84,21 @@ class ScriptViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
 
+        # Store beat linkage mapping before scene replacement to preserve beats
+        linked_beats = list(script.beats.filter(linked_scene__isnull=False))
+        beat_scene_headings = {
+            b.id: b.linked_scene.heading for b in linked_beats if b.linked_scene
+        }
+
         # Atomic replacement: delete old scenes (cascades to lines), create new
         script.scenes.all().delete()
 
+        new_scenes_by_heading = {}
         for scene_data in scenes_data:
             lines_data = scene_data.pop("lines", [])
             scene = Scene.objects.create(script=script, **scene_data)
+            if scene.heading:
+                new_scenes_by_heading[scene.heading] = scene
             Line.objects.bulk_create(
                 [
                     Line(
@@ -95,12 +111,15 @@ class ScriptViewSet(viewsets.ModelViewSet):
                 ]
             )
 
-        # Touch updated_at
-        Script.objects.filter(pk=script.pk).update(
-            updated_at=script.updated_at.__class__.now()
-            if hasattr(script.updated_at, "__class__")
-            else None
-        )
+        # Re-link beats if new scene matching heading exists
+        for beat in linked_beats:
+            heading = beat_scene_headings.get(beat.id)
+            if heading and heading in new_scenes_by_heading:
+                beat.linked_scene = new_scenes_by_heading[heading]
+                beat.save(update_fields=["linked_scene"])
+
+        # Touch updated_at with timezone-aware timestamp
+        Script.objects.filter(pk=script.pk).update(updated_at=timezone.now())
         script.save(update_fields=["updated_at"])
 
         serializer = ScriptDetailSerializer(script)
@@ -112,7 +131,7 @@ class ScriptViewSet(viewsets.ModelViewSet):
         script = self.get_object()
 
         scenes_data = []
-        for scene in script.scenes.prefetch_related("lines").all():
+        for scene in script.scenes.prefetch_related("lines").all().order_by("order"):
             scenes_data.append(
                 {
                     "order": scene.order,
@@ -122,7 +141,7 @@ class ScriptViewSet(viewsets.ModelViewSet):
                     "pov_character": scene.pov_character,
                     "lines": [
                         {"order": l.order, "type": l.type, "text": l.text}
-                        for l in scene.lines.all()
+                        for l in scene.lines.all().order_by("order")
                     ],
                 }
             )

@@ -34,8 +34,8 @@ export const importFountain = (scriptId, fountainText) =>
  * Download Fountain text for a script.
  */
 export const exportFountain = (scriptId) =>
-  axios
-    .get(`/api/scripts/${scriptId}/export_fountain/`, {
+  api
+    .get(`/scripts/${scriptId}/export_fountain/`, {
       responseType: "text",
     })
     .then((r) => r.data);
@@ -44,8 +44,8 @@ export const exportFountain = (scriptId) =>
  * Download PDF for a script.
  */
 export const exportPdf = (scriptId, filename = "script.pdf") => {
-  return axios
-    .get(`/api/scripts/${scriptId}/export_pdf/`, {
+  return api
+    .get(`/scripts/${scriptId}/export_pdf/`, {
       responseType: "blob",
     })
     .then((response) => {
@@ -66,8 +66,8 @@ export const exportPdf = (scriptId, filename = "script.pdf") => {
  * Download Word (.docx) for a script.
  */
 export const exportWord = (scriptId, filename = "script.docx") => {
-  return axios
-    .get(`/api/scripts/${scriptId}/export_word/`, {
+  return api
+    .get(`/scripts/${scriptId}/export_word/`, {
       responseType: "blob",
     })
     .then((response) => {

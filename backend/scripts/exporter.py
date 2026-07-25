@@ -4,10 +4,15 @@ from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_RIGHT, TA_LEFT
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+# pyrefly: ignore [missing-import]
 from docx import Document
+# pyrefly: ignore [missing-import]
 from docx.shared import Inches, Pt
+# pyrefly: ignore [missing-import]
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+# pyrefly: ignore [missing-import]
 from docx.oxml import OxmlElement
+# pyrefly: ignore [missing-import]
 from docx.oxml.ns import qn
 
 

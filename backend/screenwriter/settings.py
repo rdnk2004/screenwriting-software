@@ -61,7 +61,7 @@ WSGI_APPLICATION = "screenwriter.wsgi.application"
 # Database
 # Set DB_ENGINE=sqlite to use SQLite for local dev without Postgres.
 # ---------------------------------------------------------------------------
-_db_engine = os.environ.get("DB_ENGINE", "postgres")
+_db_engine = os.environ.get("DB_ENGINE", "sqlite")
 
 if _db_engine == "sqlite":
     DATABASES = {

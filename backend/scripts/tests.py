@@ -234,3 +234,78 @@ class ScreenwriterAPITests(APITestCase):
         self.assertEqual(data["total_dialogue_lines"], 3)
         self.assertEqual(len(data["locations"]), 2)
         self.assertEqual(len(data["dialogue_balance"]), 2)
+
+    def test_character_extraction_excludes_structural_terms(self):
+        """
+        Assert that structural terms (transitions, scene headings, etc.) are excluded from character extraction.
+        """
+        from .models import Character
+        script = Script.objects.create(title="Structural Exclusions Test", owner=self.user)
+        scene = Scene.objects.create(script=script, order=0, heading="INT. HOUSE - DAY")
+
+        Line.objects.create(scene=scene, order=0, type="character", text="CUT TO:")
+        Line.objects.create(scene=scene, order=1, type="character", text="FADE OUT.")
+        Line.objects.create(scene=scene, order=2, type="character", text="INT. HOUSE - DAY")
+        Line.objects.create(scene=scene, order=3, type="character", text="SARAH")
+        Line.objects.create(scene=scene, order=4, type="dialogue", text="I am a real character.")
+
+        url = reverse("script-extract-characters", kwargs={"pk": script.pk})
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        extracted = Character.objects.filter(script=script)
+        extracted_names = [c.name.upper() for c in extracted]
+
+        self.assertNotIn("CUT TO:", extracted_names)
+        self.assertNotIn("CUT TO", extracted_names)
+        self.assertNotIn("FADE OUT.", extracted_names)
+        self.assertNotIn("FADE OUT", extracted_names)
+        self.assertNotIn("INT. HOUSE - DAY", extracted_names)
+        self.assertEqual(extracted.count(), 1)
+        self.assertEqual(extracted.first().name, "Sarah")
+
+    def test_character_extraction_merges_extensions(self):
+        """
+        Assert that 'JOHN' and 'JOHN (V.O.)' resolve to the same Character record.
+        """
+        from .models import Character
+        script = Script.objects.create(title="Extension Merge Test", owner=self.user)
+        scene = Scene.objects.create(script=script, order=0, heading="INT. ROOM - NIGHT")
+
+        Line.objects.create(scene=scene, order=0, type="character", text="JOHN")
+        Line.objects.create(scene=scene, order=1, type="dialogue", text="Speaking live.")
+        Line.objects.create(scene=scene, order=2, type="character", text="JOHN (V.O.)")
+        Line.objects.create(scene=scene, order=3, type="dialogue", text="Voice over now.")
+
+        url = reverse("script-extract-characters", kwargs={"pk": script.pk})
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        extracted = Character.objects.filter(script=script)
+        self.assertEqual(extracted.count(), 1)
+        self.assertEqual(extracted.first().name, "John")
+
+    def test_character_extraction_excludes_montage_and_close_on(self):
+        """
+        Assert that 'MONTAGE' and 'CLOSE ON' are excluded from character extraction.
+        """
+        from .models import Character
+        script = Script.objects.create(title="Montage and Close On Test", owner=self.user)
+        scene = Scene.objects.create(script=script, order=0, heading="EXT. STREET - DAY")
+
+        Line.objects.create(scene=scene, order=0, type="character", text="MONTAGE")
+        Line.objects.create(scene=scene, order=1, type="character", text="CLOSE ON")
+        Line.objects.create(scene=scene, order=2, type="character", text="DAVID")
+        Line.objects.create(scene=scene, order=3, type="dialogue", text="Hello.")
+
+        url = reverse("script-extract-characters", kwargs={"pk": script.pk})
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        extracted = Character.objects.filter(script=script)
+        extracted_names = [c.name.upper() for c in extracted]
+
+        self.assertNotIn("MONTAGE", extracted_names)
+        self.assertNotIn("CLOSE ON", extracted_names)
+        self.assertEqual(extracted.count(), 1)
+        self.assertEqual(extracted.first().name, "David")

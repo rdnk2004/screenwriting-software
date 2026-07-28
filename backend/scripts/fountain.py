@@ -15,6 +15,7 @@ Supported elements:
 """
 import re
 from typing import Iterator
+from .screenplay_terms import extract_character_extension
 
 # ---------------------------------------------------------------------------
 # Regex helpers
@@ -129,8 +130,9 @@ def parse_fountain(text: str) -> list[dict]:
         nonlocal line_order, prev_type
         if current_scene is None:
             return
+        ext = extract_character_extension(ltext) if ltype == "character" else ""
         current_scene["lines"].append(
-            {"order": line_order, "type": ltype, "text": ltext}
+            {"order": line_order, "type": ltype, "text": ltext, "extension": ext}
         )
         line_order += 1
         prev_type = ltype

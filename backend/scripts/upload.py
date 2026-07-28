@@ -52,6 +52,7 @@ def create_script_from_upload(user, title: str, file_obj, filename: str) -> Scri
                     order=l["order"],
                     type=l["type"],
                     text=l["text"],
+                    extension=l.get("extension", ""),
                 )
                 for l in lines_data
             ]

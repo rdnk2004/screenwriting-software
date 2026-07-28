@@ -2,24 +2,17 @@
 from rest_framework import serializers
 import re
 from .models import Script, Scene, Line, Character, Relationship, Beat
-
-
-def normalize_character_name(text: str) -> str:
-    """
-    Normalizes a character line cue text by stripping extensions like (V.O.), (O.S.), (CONT'D)
-    and extra whitespace, returning uppercase string.
-    Example: 'JOHN (V.O.)' -> 'JOHN'
-    """
-    if not text:
-        return ""
-    cleaned = re.sub(r"\s*\([^)]*\)", "", text)
-    return cleaned.strip().upper()
+from .screenplay_terms import (
+    normalize_character_name,
+    is_valid_character_cue,
+    extract_character_extension,
+)
 
 
 class LineSerializer(serializers.ModelSerializer):
     class Meta:
         model = Line
-        fields = ["id", "order", "type", "text"]
+        fields = ["id", "order", "type", "text", "extension"]
 
 
 class SceneSerializer(serializers.ModelSerializer):
@@ -98,6 +91,9 @@ class CharacterSerializer(serializers.ModelSerializer):
             is_target_character = False
             for line in lines:
                 if line.type == "character":
+                    if not is_valid_character_cue(line.text):
+                        is_target_character = False
+                        continue
                     char_name = normalize_character_name(line.text)
                     if char_name == target_name:
                         in_scene = True

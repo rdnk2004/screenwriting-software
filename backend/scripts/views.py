@@ -20,8 +20,8 @@ from .serializers import (
     CharacterSerializer,
     RelationshipSerializer,
     BeatSerializer,
-    normalize_character_name,
 )
+from .screenplay_terms import normalize_character_name, is_valid_character_cue
 from .fountain import parse_fountain, serialize_to_fountain
 from .exporter import export_script_to_pdf, export_script_to_word
 
@@ -138,6 +138,7 @@ class ScriptViewSet(viewsets.ModelViewSet):
                         order=l["order"],
                         type=l["type"],
                         text=l["text"],
+                        extension=l.get("extension", ""),
                     )
                     for l in lines_data
                 ]
@@ -222,6 +223,8 @@ class ScriptViewSet(viewsets.ModelViewSet):
 
         created = []
         for raw_name in character_lines:
+            if not is_valid_character_cue(raw_name):
+                continue
             norm = normalize_character_name(raw_name)
             if norm and norm not in existing_normalized:
                 # Use title-cased name for display or normalized uppercase
@@ -256,6 +259,8 @@ class ScriptViewSet(viewsets.ModelViewSet):
         dialogue_counts = {}
         total_dialogue_lines = 0
         for d_line in dialogue_lines:
+            if not is_valid_character_cue(d_line.text):
+                continue
             norm_name = normalize_character_name(d_line.text)
             if norm_name:
                 dialogue_counts[norm_name] = dialogue_counts.get(norm_name, 0) + 1
@@ -366,6 +371,8 @@ class ScriptViewSet(viewsets.ModelViewSet):
 
             for i, line in enumerate(lines):
                 if line.type == Line.LineType.CHARACTER:
+                    if not is_valid_character_cue(line.text):
+                        continue
                     speaker = normalize_character_name(line.text)
                     if speaker:
                         scene_chars.add(speaker)

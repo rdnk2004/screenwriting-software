@@ -49,6 +49,7 @@ class Line(models.Model):
         max_length=32, choices=LineType.choices, default=LineType.ACTION
     )
     text = models.TextField(blank=True)
+    extension = models.CharField(max_length=64, blank=True, default="")
 
     class Meta:
         ordering = ["order"]

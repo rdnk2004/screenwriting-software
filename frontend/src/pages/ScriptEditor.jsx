@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import FountainEditor from "../editor/FountainEditor.jsx";
+import WordRuler from "../components/WordRuler.jsx";
 import { setSpecificLineType, toggleUppercaseCurrentLine } from "../editor/fountainMode.js";
 import {
   getScript,
@@ -32,8 +33,11 @@ export default function ScriptEditor() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState(null);
 
-  // Glossary Drawer State
+  // Glossary Drawer & Ribbon State
   const [showGlossary, setShowGlossary] = useState(false);
+  const [activeTab, setActiveTab] = useState("elements"); // "home" | "elements" | "view"
+  const [showRuler, setShowRuler] = useState(true);
+  const [showLineNumbers, setShowLineNumbers] = useState(false);
 
   // Zoom & Stats state
   const [zoom, setZoom] = useState(1);
@@ -148,12 +152,25 @@ export default function ScriptEditor() {
     editorView.focus();
   };
 
+  const handleInsertPrefix = (prefix) => {
+    if (!editorView) return;
+    const { state } = editorView;
+    const sel = state.selection.main;
+    const lineObj = state.doc.lineAt(sel.head);
+    editorView.dispatch({
+      changes: { from: lineObj.from, to: lineObj.from, insert: prefix },
+    });
+    editorView.focus();
+  };
+
   const handleKeyDown = (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
       e.preventDefault();
       handleSave();
     }
   };
+
+  const totalPages = Math.max(1, Math.ceil((stats.lines || 1) / 54));
 
   if (error) {
     return (
@@ -168,12 +185,12 @@ export default function ScriptEditor() {
 
   return (
     <div className="editor-layout" onKeyDown={handleKeyDown}>
-      {/* Top Application Toolbar */}
+      {/* MS Word Top Header Bar */}
       <div className="editor-toolbar">
         <button
           className="btn"
           onClick={() => navigate("/")}
-          style={{ padding: "0.4rem 0.8rem" }}
+          style={{ padding: "0.35rem 0.75rem", fontSize: "0.85rem" }}
         >
           ← Dashboard
         </button>
@@ -187,27 +204,27 @@ export default function ScriptEditor() {
           aria-label="Script title"
         />
 
-        <button className="btn btn-primary" onClick={handleSave}>
-          💾 Save
-        </button>
+        <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+          <button className="btn btn-primary" onClick={handleSave} title="Save Script (Ctrl+S)">
+            💾 Save
+          </button>
+          <button className="btn" onClick={handleExportPdf} title="Export PDF Document">
+            📄 Export PDF
+          </button>
+          <button className="btn" onClick={handleExportWord} title="Export Microsoft Word (.docx)">
+            📝 Export Word
+          </button>
+        </div>
 
-        <button className="btn" onClick={handleExportPdf}>
-          📄 Export PDF
-        </button>
-
-        <button className="btn" onClick={handleExportWord}>
-          📝 Export Word
-        </button>
-
-        <button
-          className="btn"
-          style={{ background: "#1e293b", borderColor: "#38bdf8", color: "#38bdf8" }}
-          onClick={() => setShowGlossary(true)}
-        >
-          📖 Screenwriting Guide
-        </button>
-
-        <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: "0.4rem", alignItems: "center" }}>
+          <button
+            className="btn"
+            style={{ background: "#1e293b", borderColor: "#38bdf8", color: "#38bdf8" }}
+            onClick={() => setShowGlossary(true)}
+            title="Screenwriting Glossary & Guidelines"
+          >
+            📖 Guide
+          </button>
           <button className="btn" onClick={() => navigate(`/scripts/${id}/characters`)}>
             🎭 Characters
           </button>
@@ -222,134 +239,236 @@ export default function ScriptEditor() {
           </button>
         </div>
 
-        {status && <span style={{ fontSize: "0.8rem", color: "#38bdf8", fontWeight: 600 }}>{status}</span>}
-      </div>
-
-      {/* Quick Element & Formatting Toolbar */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-          padding: "0.5rem 1.25rem",
-          background: "#1e293b",
-          borderBottom: "1px solid #334155",
-          flexWrap: "wrap",
-          fontSize: "0.8rem",
-        }}
-      >
-        <span style={{ color: "#94a3b8", fontWeight: 600, marginRight: "0.4rem" }}>
-          Format Element:
-        </span>
-
-        {ELEMENT_TYPES.map((elem) => {
-          const isActive = stats.lineType === elem.id;
-          return (
-            <button
-              key={elem.id}
-              className={`btn ${isActive ? "btn-primary" : ""}`}
-              style={{
-                padding: "0.25rem 0.6rem",
-                fontSize: "0.78rem",
-                borderRadius: "6px",
-              }}
-              onClick={() => handleSetElementType(elem.id)}
-              title={elem.shortcut}
-            >
-              {elem.label}
-            </button>
-          );
-        })}
-
-        <div style={{ width: "1px", height: "20px", background: "#334155", margin: "0 0.5rem" }} />
-
-        {/* Text Formatting Helpers */}
-        <button
-          className="btn"
-          style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", fontWeight: "bold" }}
-          onClick={() => handleInsertMarkup("**")}
-          title="Bold (**text**)"
-        >
-          B
-        </button>
-
-        <button
-          className="btn"
-          style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", fontStyle: "italic" }}
-          onClick={() => handleInsertMarkup("*")}
-          title="Italic (*text*)"
-        >
-          I
-        </button>
-
-        <button
-          className="btn"
-          style={{ padding: "0.25rem 0.5rem", fontSize: "0.78rem" }}
-          onClick={handleToggleUppercase}
-          title="Uppercase (Ctrl+Shift+U)"
-        >
-          AA
-        </button>
-
-        {/* Zoom Controls */}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-          <span style={{ color: "#94a3b8", fontSize: "0.75rem" }}>Zoom:</span>
-          {[0.8, 1, 1.2, 1.5].map((z) => (
-            <button
-              key={z}
-              className={`btn ${zoom === z ? "btn-primary" : ""}`}
-              style={{ padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}
-              onClick={() => setZoom(z)}
-            >
-              {Math.round(z * 100)}%
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Screenplay Paper Area (Word-like Page Environment) */}
-      <div className="editor-scroll">
-        {loading ? (
-          <p style={{ color: "#94a3b8", padding: "3rem", textAlign: "center" }}>
-            Loading screenplay document…
-          </p>
-        ) : (
-          <FountainEditor
-            initialDoc={fountainText}
-            onChange={handleEditorChange}
-            onCursorChange={handleCursorChange}
-            onInitView={setEditorView}
-            zoom={zoom}
-          />
+        {status && (
+          <span style={{ fontSize: "0.8rem", color: "#38bdf8", fontWeight: 600, marginLeft: "0.5rem" }}>
+            {status}
+          </span>
         )}
       </div>
 
-      {/* Bottom Status Bar */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "0.4rem 1.25rem",
-          background: "#0f172a",
-          borderTop: "1px solid #1e293b",
-          fontSize: "0.78rem",
-          color: "#94a3b8",
-        }}
-      >
-        <div style={{ display: "flex", gap: "1.25rem", alignItems: "center" }}>
-          <span>
-            Current Element: <strong style={{ color: "#38bdf8", textTransform: "capitalize" }}>{stats.lineType.replace("_", " ")}</strong>
-          </span>
-          <span>Line {stats.lineNo} of {stats.lines}</span>
-          <span>{stats.words} Words</span>
-          <span>~{Math.max(1, Math.ceil(stats.lines / 54))} Pages</span>
+      {/* MS Word Office Ribbon Container */}
+      <div className="word-ribbon-container">
+        {/* Ribbon Tab Selectors */}
+        <div className="ribbon-tabs">
+          <button
+            className={`ribbon-tab ${activeTab === "elements" ? "active" : ""}`}
+            onClick={() => setActiveTab("elements")}
+          >
+            🎭 Screenplay Elements
+          </button>
+          <button
+            className={`ribbon-tab ${activeTab === "home" ? "active" : ""}`}
+            onClick={() => setActiveTab("home")}
+          >
+            ✏️ Text Formatting & Editing
+          </button>
+          <button
+            className={`ribbon-tab ${activeTab === "view" ? "active" : ""}`}
+            onClick={() => setActiveTab("view")}
+          >
+            👁️ View & Ruler Options
+          </button>
         </div>
 
-        <div>
-          <span style={{ color: "#64748b" }}>
-            Shortcuts: <strong>Tab</strong> = Cycle &nbsp;|&nbsp; <strong>Enter</strong> = Smart Flow &nbsp;|&nbsp; <strong>Ctrl+Alt+1..6</strong> = Format Element &nbsp;|&nbsp; <strong>Ctrl+S</strong> = Save
+        {/* Ribbon Tab Content Panes */}
+        <div className="ribbon-content">
+          {activeTab === "elements" && (
+            <div className="ribbon-group">
+              <span className="ribbon-label">Format Element (Tab to Cycle):</span>
+              <div className="ribbon-buttons">
+                {ELEMENT_TYPES.map((elem) => {
+                  const isActive = stats.lineType === elem.id;
+                  return (
+                    <button
+                      key={elem.id}
+                      className={`ribbon-btn ${isActive ? "active" : ""}`}
+                      onClick={() => handleSetElementType(elem.id)}
+                      title={`${elem.label} (${elem.shortcut})`}
+                    >
+                      {elem.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "home" && (
+            <div className="ribbon-group" style={{ gap: "1rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <span className="ribbon-label">Font:</span>
+                <span className="ribbon-font-badge">Courier Prime 12pt</span>
+              </div>
+
+              <div className="ribbon-divider" />
+
+              <div style={{ display: "flex", gap: "0.3rem" }}>
+                <button
+                  className="ribbon-btn"
+                  style={{ fontWeight: "bold" }}
+                  onClick={() => handleInsertMarkup("**")}
+                  title="Bold (**text**)"
+                >
+                  B
+                </button>
+                <button
+                  className="ribbon-btn"
+                  style={{ fontStyle: "italic" }}
+                  onClick={() => handleInsertMarkup("*")}
+                  title="Italic (*text*)"
+                >
+                  I
+                </button>
+                <button
+                  className="ribbon-btn"
+                  style={{ textDecoration: "underline" }}
+                  onClick={() => handleInsertMarkup("_")}
+                  title="Underline (_text_)"
+                >
+                  U
+                </button>
+                <button
+                  className="ribbon-btn"
+                  onClick={handleToggleUppercase}
+                  title="Uppercase Current Line (Ctrl+Shift+U)"
+                >
+                  AA
+                </button>
+              </div>
+
+              <div className="ribbon-divider" />
+
+              <div style={{ display: "flex", gap: "0.3rem" }}>
+                <button
+                  className="ribbon-btn"
+                  onClick={() => handleInsertPrefix("INT. ")}
+                  title="Insert INT. prefix"
+                >
+                  + INT.
+                </button>
+                <button
+                  className="ribbon-btn"
+                  onClick={() => handleInsertPrefix("EXT. ")}
+                  title="Insert EXT. prefix"
+                >
+                  + EXT.
+                </button>
+                <button
+                  className="ribbon-btn"
+                  onClick={() => handleInsertPrefix("CUT TO: ")}
+                  title="Insert CUT TO: prefix"
+                >
+                  + CUT TO:
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "view" && (
+            <div className="ribbon-group" style={{ gap: "1.25rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <button
+                  className={`ribbon-btn ${showRuler ? "active" : ""}`}
+                  onClick={() => setShowRuler(!showRuler)}
+                >
+                  📏 {showRuler ? "Hide Ruler" : "Show Ruler"}
+                </button>
+                <button
+                  className={`ribbon-btn ${showLineNumbers ? "active" : ""}`}
+                  onClick={() => setShowLineNumbers(!showLineNumbers)}
+                >
+                  🔢 {showLineNumbers ? "Hide Line Numbers" : "Show Line Numbers"}
+                </button>
+              </div>
+
+              <div className="ribbon-divider" />
+
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <span className="ribbon-label">Zoom Level:</span>
+                {[0.75, 0.9, 1, 1.25, 1.5].map((z) => (
+                  <button
+                    key={z}
+                    className={`ribbon-btn ${zoom === z ? "active" : ""}`}
+                    onClick={() => setZoom(z)}
+                  >
+                    {Math.round(z * 100)}%
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Screenplay Paper Workspace (MS Word Studio Environment) */}
+      <div className="editor-desk">
+        {loading ? (
+          <p style={{ color: "#94a3b8", padding: "4rem", textAlign: "center" }}>
+            Loading screenplay document into Word editor…
+          </p>
+        ) : (
+          <div
+            className="paper-wrapper"
+            style={{
+              transform: `scale(${zoom})`,
+              transformOrigin: "top center",
+              transition: "transform 0.15s ease-out",
+            }}
+          >
+            {/* MS Word Horizontal Ruler */}
+            {showRuler && <WordRuler activeType={stats.lineType} />}
+
+            {/* Pristine 8.5" x 11" Screenplay Paper Document */}
+            <FountainEditor
+              initialDoc={fountainText}
+              onChange={handleEditorChange}
+              onCursorChange={handleCursorChange}
+              onInitView={setEditorView}
+              zoom={1}
+              showLineNumbers={showLineNumbers}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* MS Word Professional Status Bar */}
+      <div className="word-status-bar">
+        <div className="status-left">
+          <span>
+            PAGE <strong style={{ color: "#38bdf8" }}>{Math.ceil(stats.lineNo / 54) || 1}</strong> OF {totalPages}
           </span>
+          <span className="status-divider">|</span>
+          <span>{stats.words} WORDS</span>
+          <span className="status-divider">|</span>
+          <span>{stats.lines} LINES</span>
+          <span className="status-divider">|</span>
+          <span>
+            ELEMENT: <strong style={{ color: "#38bdf8", textTransform: "uppercase" }}>{stats.lineType.replace("_", " ")}</strong>
+          </span>
+        </div>
+
+        <div className="status-center">
+          <span>
+            <strong>Tab</strong>: Cycle &nbsp;•&nbsp; <strong>Enter</strong>: Smart Flow &nbsp;•&nbsp; <strong>Ctrl+Alt+1..6</strong>: Elements
+          </span>
+        </div>
+
+        <div className="status-right">
+          <span>ZOOM: {Math.round(zoom * 100)}%</span>
+          <button
+            className="status-zoom-btn"
+            onClick={() => setZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 10) / 10))}
+            title="Zoom Out"
+          >
+            -
+          </button>
+          <button
+            className="status-zoom-btn"
+            onClick={() => setZoom((z) => Math.min(2.0, Math.round((z + 0.1) * 10) / 10))}
+            title="Zoom In"
+          >
+            +
+          </button>
         </div>
       </div>
 

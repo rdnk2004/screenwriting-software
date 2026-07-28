@@ -170,6 +170,17 @@ function buildDecorations(view) {
       const lineObj = view.state.doc.line(lineNo);
       const type = getLineType(view.state, lineNo);
       const cls = TYPE_CLASS[type] || "fountain-action";
+
+      if (lineNo > 1 && lineNo % 54 === 1) {
+        const pageNum = Math.floor(lineNo / 54) + 1;
+        decorations.push(
+          Decoration.widget({
+            widget: new PageBreakWidget(pageNum),
+            side: -1,
+          }).range(lineObj.from)
+        );
+      }
+
       decorations.push(
         Decoration.line({ class: cls }).range(lineObj.from)
       );

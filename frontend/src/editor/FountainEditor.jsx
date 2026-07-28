@@ -11,6 +11,7 @@ export default function FountainEditor({
   onCursorChange,
   onInitView,
   zoom = 1,
+  showLineNumbers = false,
 }) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
@@ -18,34 +19,40 @@ export default function FountainEditor({
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const extensions = [
+      history(),
+      keymapFacet.of(historyKeymap),
+      EditorView.lineWrapping, // Crucial: wraps lines inside paper bounds
+      highlightActiveLine(),
+      ...fountainExtension,
+      EditorView.updateListener.of((update) => {
+        if (update.docChanged && onChange) {
+          onChange(update.state.doc.toString());
+        }
+        if (onCursorChange) {
+          const { state } = update.view;
+          const sel = state.selection.main;
+          const lineNo = state.doc.lineAt(sel.head).number;
+          const lineType = getLineType(state, lineNo);
+          const text = state.doc.toString();
+          const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+          const lines = state.doc.lines;
+          onCursorChange({ lineNo, lineType, words, lines });
+        }
+      }),
+      EditorView.theme({
+        "&": { height: "100%" },
+        ".cm-scroller": { overflow: "visible" },
+      }),
+    ];
+
+    if (showLineNumbers) {
+      extensions.unshift(lineNumbers());
+    }
+
     const state = EditorState.create({
       doc: initialDoc,
-      extensions: [
-        history(),
-        keymapFacet.of(historyKeymap),
-        lineNumbers(),
-        highlightActiveLine(),
-        ...fountainExtension,
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged && onChange) {
-            onChange(update.state.doc.toString());
-          }
-          if (onCursorChange) {
-            const { state } = update.view;
-            const sel = state.selection.main;
-            const lineNo = state.doc.lineAt(sel.head).number;
-            const lineType = getLineType(state, lineNo);
-            const text = state.doc.toString();
-            const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-            const lines = state.doc.lines;
-            onCursorChange({ lineNo, lineType, words, lines });
-          }
-        }),
-        EditorView.theme({
-          "&": { height: "100%" },
-          ".cm-scroller": { overflow: "auto" },
-        }),
-      ],
+      extensions,
     });
 
     const view = new EditorView({

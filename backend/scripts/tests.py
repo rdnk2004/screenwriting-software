@@ -1080,6 +1080,57 @@ class ScreenwriterAPITests(APITestCase):
         self.assertIn("roles", api_data)
         self.assertIn("timeline", api_data)
 
+    def test_table_read_dual_dialogue_and_action_exclusion(self):
+        from .table_read import generate_table_read_manifest
+        script = Script.objects.create(title="Dual Dialogue Table Read", owner=self.user)
+        scene = Scene.objects.create(script=script, order=0, heading="INT. POLICE INTERROGATION - NIGHT")
+        Line.objects.create(scene=scene, order=0, type="action", text="Smoke drifts under the glaring lamp.")
+        Line.objects.create(scene=scene, order=1, type="character", text="DETECTIVE", is_dual_dialogue=True, dual_pos="left")
+        Line.objects.create(scene=scene, order=2, type="dialogue", text="Where were you on the night of the fourth?", is_dual_dialogue=True, dual_pos="left")
+        Line.objects.create(scene=scene, order=3, type="character", text="SUSPECT", is_dual_dialogue=True, dual_pos="right")
+        Line.objects.create(scene=scene, order=4, type="dialogue", text="I told you a hundred times, I was asleep!", is_dual_dialogue=True, dual_pos="right")
+
+        # Exclude action lines
+        manifest = generate_table_read_manifest(
+            script=script,
+            voice_mapping={"DETECTIVE": "voice-deep-gruff", "SUSPECT": "voice-anxious-tenor"},
+            include_action_in_read=False,
+        )
+
+        timeline = manifest["timeline"]
+        # Slugline + 2 dialogue cues (action was excluded)
+        self.assertEqual(len(timeline), 3)
+
+        det_block = next(b for b in timeline if b["speaker"] == "DETECTIVE")
+        self.assertTrue(det_block["is_dual_dialogue"])
+        self.assertEqual(det_block["dual_pos"], "left")
+
+        sus_block = next(b for b in timeline if b["speaker"] == "SUSPECT")
+        self.assertTrue(sus_block["is_dual_dialogue"])
+        self.assertEqual(sus_block["dual_pos"], "right")
+
+        # Voice persona mapping applied
+        det_role = next(r for r in manifest["roles"] if r["name"] == "DETECTIVE")
+        self.assertEqual(det_role["voice_persona_id"], "voice-deep-gruff")
+
+    def test_voice_analyzer_single_character_and_punctuation(self):
+        from .voice_analyzer import analyze_character_voices
+        script = Script.objects.create(title="Solo Monologue", owner=self.user)
+        scene = Scene.objects.create(script=script, order=0, heading="EXT. DESERT - DAWN")
+        Line.objects.create(scene=scene, order=0, type="character", text="HERMIT")
+        Line.objects.create(scene=scene, order=1, type="dialogue", text="Is there anybody out there?")
+        Line.objects.create(scene=scene, order=2, type="character", text="HERMIT")
+        Line.objects.create(scene=scene, order=3, type="dialogue", text="I hear only the whisper of the wind... nothing else.")
+
+        analysis = analyze_character_voices(script)
+        self.assertEqual(len(analysis["characters"]), 1)
+        hermit = analysis["characters"][0]
+        self.assertEqual(hermit["name"], "HERMIT")
+        self.assertGreater(hermit["punctuation_profile"]["questions_pct"], 0)
+        self.assertGreater(hermit["punctuation_profile"]["hesitations_pct"], 0)
+        self.assertEqual(len(analysis["similarity_matrix"]), 0) # No second character for pairwise matrix
+
+
 
 
 

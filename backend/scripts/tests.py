@@ -865,6 +865,68 @@ class ScreenwriterAPITests(APITestCase):
         self.assertEqual(parsed["scenes"][1]["location"], "SPACE STATION AIRLOCK")
         self.assertEqual(parsed["scenes"][1]["time_of_day"], "CONTINUOUS")
 
+    def test_production_eighths_calculation_and_formatting(self):
+        from .breakdown import format_eighths, calculate_scene_eighths, classify_int_ext
+        self.assertEqual(format_eighths(0), "0")
+        self.assertEqual(format_eighths(1), "1/8")
+        self.assertEqual(format_eighths(4), "4/8")
+        self.assertEqual(format_eighths(8), "1")
+        self.assertEqual(format_eighths(11), "1 3/8")
+        self.assertEqual(format_eighths(16), "2")
+        self.assertEqual(format_eighths(19), "2 3/8")
+
+        self.assertEqual(classify_int_ext("INT. KITCHEN - DAY"), "INT")
+        self.assertEqual(classify_int_ext("EXT. HIGHWAY - NIGHT"), "EXT")
+        self.assertEqual(classify_int_ext("INT./EXT. CAR - DAY"), "INT/EXT")
+        self.assertEqual(classify_int_ext("I/E TENT - NIGHT"), "INT/EXT")
+
+        # Empty lines return minimum 1 eighth
+        self.assertEqual(calculate_scene_eighths([]), 1)
+
+    def test_production_breakdown_generation(self):
+        from .breakdown import generate_production_breakdown
+        script = Script.objects.create(title="Breakdown Test Script", owner=self.user)
+
+        # Scene 1: INT. OFFICE - DAY (Scene 1)
+        s1 = Scene.objects.create(script=script, order=0, heading="INT. OFFICE - DAY", location="OFFICE", time_of_day="DAY", scene_number="1")
+        Line.objects.create(scene=s1, order=0, type="scene_heading", text="INT. OFFICE - DAY")
+        Line.objects.create(scene=s1, order=1, type="action", text="Sunlight filters through Venetian blinds.")
+        Line.objects.create(scene=s1, order=2, type="character", text="ALICE")
+        Line.objects.create(scene=s1, order=3, type="dialogue", text="We have a problem with the quarterly projections.")
+        Line.objects.create(scene=s1, order=4, type="character", text="BOB")
+        Line.objects.create(scene=s1, order=5, type="dialogue", text="Let me look at the ledger.")
+
+        # Scene 2: EXT. ROOFTOP - NIGHT (Scene 2)
+        s2 = Scene.objects.create(script=script, order=1, heading="EXT. ROOFTOP - NIGHT", location="ROOFTOP", time_of_day="NIGHT", scene_number="2")
+        Line.objects.create(scene=s2, order=0, type="scene_heading", text="EXT. ROOFTOP - NIGHT")
+        Line.objects.create(scene=s2, order=1, type="action", text="Rain falls steadily.")
+        Line.objects.create(scene=s2, order=2, type="character", text="ALICE")
+        Line.objects.create(scene=s2, order=3, type="dialogue", text="Why did you bring me up here in the rain?")
+
+        breakdown = generate_production_breakdown(script)
+
+        self.assertEqual(breakdown["summary"]["total_scenes"], 2)
+        self.assertEqual(breakdown["summary"]["speaking_characters_count"], 2)
+        self.assertEqual(breakdown["summary"]["unique_locations_count"], 2)
+
+        # Cast assertions
+        cast_names = [c["name"] for c in breakdown["cast"]]
+        self.assertIn("ALICE", cast_names)
+        self.assertIn("BOB", cast_names)
+
+        alice_info = next(c for c in breakdown["cast"] if c["name"] == "ALICE")
+        self.assertEqual(alice_info["scene_count"], 2)
+        self.assertEqual(alice_info["dialogue_line_count"], 2)
+
+        bob_info = next(c for c in breakdown["cast"] if c["name"] == "BOB")
+        self.assertEqual(bob_info["scene_count"], 1)
+
+        # Shooting matrix assertions
+        matrix = breakdown["shooting_matrix"]
+        self.assertEqual(matrix["INT_DAY"]["scenes"], 1)
+        self.assertEqual(matrix["EXT_NIGHT"]["scenes"], 1)
+
+
 
 
 

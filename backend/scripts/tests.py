@@ -798,6 +798,74 @@ class ScreenwriterAPITests(APITestCase):
         self.assertEqual(new_scene.heading, "INT. BATCAVE - NIGHT")
         self.assertEqual(new_scene.scene_number, "8")
 
+    def test_fdx_dual_dialogue_with_parenthetical_roundtrip(self):
+        from .fdx import parse_fdx, serialize_to_fdx
+        raw_fdx = """<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<FinalDraft DocumentType="Script" Template="No" Version="1">
+  <Content>
+    <Paragraph Type="Scene Heading">
+      <Text>INT. SUBMARINE - NIGHT</Text>
+    </Paragraph>
+    <DualDialogue>
+      <Paragraph Type="Character">
+        <Text>CAPTAIN</Text>
+      </Paragraph>
+      <Paragraph Type="Parenthetical">
+        <Text>(shouting)</Text>
+      </Paragraph>
+      <Paragraph Type="Dialogue">
+        <Text>Dive! Dive!</Text>
+      </Paragraph>
+      <Paragraph Type="Character">
+        <Text>FIRST OFFICER</Text>
+      </Paragraph>
+      <Paragraph Type="Parenthetical">
+        <Text>(panicked)</Text>
+      </Paragraph>
+      <Paragraph Type="Dialogue">
+        <Text>Ballast tanks failing!</Text>
+      </Paragraph>
+    </DualDialogue>
+  </Content>
+</FinalDraft>"""
+
+        parsed = parse_fdx(raw_fdx)
+        scene = parsed["scenes"][0]
+        lines = scene["lines"]
+        self.assertEqual(len(lines), 7) # heading + 3 left + 3 right
+
+        # Serialize back to FDX
+        exported = serialize_to_fdx(parsed["scenes"])
+        self.assertIn("<DualDialogue>", exported)
+        self.assertIn("(shouting)", exported)
+        self.assertIn("(panicked)", exported)
+        self.assertIn("Dive! Dive!", exported)
+
+    def test_fdx_scene_heading_complex_prefixes(self):
+        from .fdx import parse_fdx
+        raw_fdx = """<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<FinalDraft DocumentType="Script" Template="No" Version="1">
+  <Content>
+    <Paragraph Type="Scene Heading">
+      <Text>INT/EXT. VINTAGE CONVERTIBLE - MOVING - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>The wind whips through their hair.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading">
+      <Text>I/E. SPACE STATION AIRLOCK - CONTINUOUS</Text>
+    </Paragraph>
+  </Content>
+</FinalDraft>"""
+
+        parsed = parse_fdx(raw_fdx)
+        self.assertEqual(len(parsed["scenes"]), 2)
+        self.assertEqual(parsed["scenes"][0]["location"], "VINTAGE CONVERTIBLE - MOVING")
+        self.assertEqual(parsed["scenes"][0]["time_of_day"], "DAY")
+        self.assertEqual(parsed["scenes"][1]["location"], "SPACE STATION AIRLOCK")
+        self.assertEqual(parsed["scenes"][1]["time_of_day"], "CONTINUOUS")
+
+
 
 
 

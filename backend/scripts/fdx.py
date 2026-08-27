@@ -328,3 +328,153 @@ def parse_fdx(xml_content: str | bytes) -> dict:
         "title_page": title_page_data,
         "scenes": scenes,
     }
+
+
+# ---------------------------------------------------------------------------
+# Public FDX Serializer API
+# ---------------------------------------------------------------------------
+
+def serialize_to_fdx(scenes_data: list[dict], title_page_data: dict | None = None) -> str:
+    """
+    Serializes structured screenplay scenes and title page metadata into Final Draft XML (.fdx).
+    """
+    root = ET.Element("FinalDraft", {"DocumentType": "Script", "Template": "No", "Version": "1"})
+
+    # 1. Build Title Page
+    if title_page_data and any(title_page_data.values()):
+        tp_elem = ET.SubElement(root, "TitlePage")
+        ET.SubElement(tp_elem, "Header")
+        tp_content = ET.SubElement(tp_elem, "Content")
+
+        title = title_page_data.get("title", "").strip()
+        if title:
+            p = ET.SubElement(tp_content, "Paragraph", {"Alignment": "Center"})
+            t = ET.SubElement(p, "Text", {"Bold": "Yes"})
+            t.text = title
+
+        credit = title_page_data.get("credit", "written by").strip()
+        if credit:
+            p = ET.SubElement(tp_content, "Paragraph", {"Alignment": "Center"})
+            t = ET.SubElement(p, "Text")
+            t.text = credit
+
+        author = title_page_data.get("author", "").strip()
+        if author:
+            p = ET.SubElement(tp_content, "Paragraph", {"Alignment": "Center"})
+            t = ET.SubElement(p, "Text")
+            t.text = author
+
+        source = title_page_data.get("source", "").strip()
+        if source:
+            p = ET.SubElement(tp_content, "Paragraph", {"Alignment": "Center"})
+            t = ET.SubElement(p, "Text")
+            t.text = source
+
+        draft_date = title_page_data.get("draft_date", "").strip()
+        if draft_date:
+            p = ET.SubElement(tp_content, "Paragraph", {"Alignment": "Left"})
+            t = ET.SubElement(p, "Text")
+            t.text = f"Draft Date: {draft_date}"
+
+        contact = title_page_data.get("contact", "").strip()
+        if contact:
+            for line in contact.splitlines():
+                if line.strip():
+                    p = ET.SubElement(tp_content, "Paragraph", {"Alignment": "Left"})
+                    t = ET.SubElement(p, "Text")
+                    t.text = line.strip()
+
+        notes = title_page_data.get("notes", "").strip()
+        if notes:
+            for line in notes.splitlines():
+                if line.strip():
+                    p = ET.SubElement(tp_content, "Paragraph", {"Alignment": "Left"})
+                    t = ET.SubElement(p, "Text")
+                    t.text = line.strip()
+
+        copyright_text = title_page_data.get("copyright", "").strip()
+        if copyright_text:
+            p = ET.SubElement(tp_content, "Paragraph", {"Alignment": "Left"})
+            t = ET.SubElement(p, "Text")
+            t.text = copyright_text
+
+    # 2. Build Content
+    content_elem = ET.SubElement(root, "Content")
+
+    for scene in sorted(scenes_data, key=lambda s: s.get("order", 0)):
+        scene_num = scene.get("scene_number", "").strip()
+        lines = sorted(scene.get("lines", []), key=lambda l: l.get("order", 0))
+
+        idx = 0
+        while idx < len(lines):
+            line = lines[idx]
+            ltype = line.get("type", "action")
+            text = line.get("text", "").strip()
+            is_dual = line.get("is_dual_dialogue", False)
+            dual_pos = line.get("dual_pos", "")
+
+            # Check if this starts a dual dialogue block
+            if is_dual and dual_pos == "left":
+                dual_elem = ET.SubElement(content_elem, "DualDialogue")
+                # Collect all left lines, then all right lines
+                while idx < len(lines) and lines[idx].get("is_dual_dialogue", False):
+                    cur_line = lines[idx]
+                    ptype = _get_fdx_paragraph_type(cur_line.get("type", "action"))
+                    p = ET.SubElement(
+                        dual_elem,
+                        "Paragraph",
+                        {"Type": ptype, "DualDialogue": cur_line.get("dual_pos", "left").capitalize()},
+                    )
+                    t = ET.SubElement(p, "Text")
+                    t.text = cur_line.get("text", "")
+                    idx += 1
+                continue
+
+            # Standard paragraph
+            ptype = _get_fdx_paragraph_type(ltype)
+            p_attrs = {"Type": ptype}
+
+            if ltype == "scene_heading":
+                if scene_num:
+                    p_attrs["Number"] = scene_num
+                p = ET.SubElement(content_elem, "Paragraph", p_attrs)
+                if scene_num:
+                    sp = ET.SubElement(p, "SceneProperties")
+                    sn = ET.SubElement(sp, "SceneNumber")
+                    sn.text = scene_num
+                t = ET.SubElement(p, "Text")
+                t.text = text.upper()
+            elif ltype == "transition":
+                p_attrs["Alignment"] = "Right"
+                p = ET.SubElement(content_elem, "Paragraph", p_attrs)
+                t = ET.SubElement(p, "Text")
+                t.text = text.upper()
+            elif ltype == "character":
+                p = ET.SubElement(content_elem, "Paragraph", p_attrs)
+                t = ET.SubElement(p, "Text")
+                t.text = text.upper()
+            else:
+                p = ET.SubElement(content_elem, "Paragraph", p_attrs)
+                t = ET.SubElement(p, "Text")
+                t.text = text
+
+            idx += 1
+
+    # Format XML with indent
+    ET.indent(root, space="  ", level=0)
+    xml_str = ET.tostring(root, encoding="utf-8", xml_declaration=True).decode("utf-8")
+    return xml_str
+
+
+def _get_fdx_paragraph_type(internal_type: str) -> str:
+    """Maps internal LineType to official Final Draft paragraph type string."""
+    mapping = {
+        "scene_heading": "Scene Heading",
+        "action": "Action",
+        "character": "Character",
+        "dialogue": "Dialogue",
+        "parenthetical": "Parenthetical",
+        "transition": "Transition",
+    }
+    return mapping.get(internal_type, "Action")
+

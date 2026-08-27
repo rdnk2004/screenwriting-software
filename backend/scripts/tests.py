@@ -693,6 +693,46 @@ class ScreenwriterAPITests(APITestCase):
         with self.assertRaises(ValueError):
             parse_fdx("THIS IS NOT XML AT ALL")
 
+    def test_fdx_serializer_full_roundtrip(self):
+        from .fdx import parse_fdx, serialize_to_fdx
+        scenes_data = [
+            {
+                "order": 0,
+                "scene_number": "3A",
+                "heading": "INT. ARCHIVE ROOM - NIGHT",
+                "lines": [
+                    {"order": 0, "type": "scene_heading", "text": "INT. ARCHIVE ROOM - NIGHT"},
+                    {"order": 1, "type": "action", "text": "Dust particles float in the projector light."},
+                    {"order": 2, "type": "character", "text": "AGENT A", "is_dual_dialogue": True, "dual_pos": "left"},
+                    {"order": 3, "type": "dialogue", "text": "Look at this reel.", "is_dual_dialogue": True, "dual_pos": "left"},
+                    {"order": 4, "type": "character", "text": "AGENT B", "is_dual_dialogue": True, "dual_pos": "right"},
+                    {"order": 5, "type": "dialogue", "text": "It's the missing footage.", "is_dual_dialogue": True, "dual_pos": "right"},
+                    {"order": 6, "type": "transition", "text": "FADE OUT."}
+                ]
+            }
+        ]
+        title_page_data = {
+            "title": "THE ARCHIVE",
+            "credit": "written by",
+            "author": "Marcus Shaw",
+            "contact": "m.shaw@agency.com",
+        }
+
+        fdx_xml = serialize_to_fdx(scenes_data, title_page_data)
+        self.assertIn("<FinalDraft", fdx_xml)
+        self.assertIn("THE ARCHIVE", fdx_xml)
+        self.assertIn("Marcus Shaw", fdx_xml)
+        self.assertIn('Number="3A"', fdx_xml)
+        self.assertIn("<DualDialogue>", fdx_xml)
+        self.assertIn("FADE OUT.", fdx_xml)
+
+        # Parse back to verify lossless roundtrip
+        re_parsed = parse_fdx(fdx_xml)
+        self.assertEqual(re_parsed["title_page"]["title"], "THE ARCHIVE")
+        self.assertEqual(re_parsed["scenes"][0]["scene_number"], "3A")
+        self.assertEqual(len(re_parsed["scenes"][0]["lines"]), 7)
+
+
 
 
 

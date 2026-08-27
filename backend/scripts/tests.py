@@ -6,7 +6,8 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 # pyrefly: ignore [missing-import]
 from django.contrib.auth.models import User
-from .models import Script, Scene, Line
+from django.core.files.uploadedfile import SimpleUploadedFile
+from .models import Script, Scene, Line, TitlePage, ScriptRevision
 
 
 class ScreenwriterAPITests(APITestCase):
@@ -1192,6 +1193,173 @@ class ScreenwriterAPITests(APITestCase):
         res = self.client.get(url)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertTrue(res.content.startswith(b"PK\x03\x04"))
+
+
+class ScreenplayEndToEndIntegrationTestSuite(APITestCase):
+    """
+    Comprehensive End-to-End Integration Test Suite:
+    Tests the complete unified lifecycle of a screenplay:
+      1. Fountain 1.1 Parsing & Ingestion with Title Page & Dual Dialogue
+      2. Hollywood 1/8th Page Production Breakdown & Shooting Schedule Matrix
+      3. Character Voice Cadence & Dialogue Homogenization Analysis
+      4. Multi-Voice Table Read Manifest Audio Timeline Generation
+      5. Multi-Format Screenplay Export Suite (PDF, Word DOCX, FDX, Fountain)
+      6. Version Revisions & History Snapshots
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="director_steven", password="password123")
+        self.client.force_authenticate(user=self.user)
+
+    def test_complete_screenplay_lifecycle_pipeline(self):
+        # 1. Ingest Complete Fountain Script
+        fountain_source = (
+            "Title: INCEPTION: THE DRIFT\n"
+            "Credit: Written by\n"
+            "Author: Christopher Nolan\n"
+            "Draft date: July 16, 2010\n"
+            "Contact: Syncopy\n"
+            "\n"
+            "EXT. ROOFTOP - NIGHT #1#\n"
+            "= Cobb stands overlooking the rain-slicked city.\n"
+            "\n"
+            "Rain hammers against the concrete parapet.\n"
+            "\n"
+            "COBB\n"
+            "What is the most resilient parasite?\n"
+            "\n"
+            "ARTHUR\n"
+            "A bacteria? A virus?\n"
+            "\n"
+            "COBB\n"
+            "An idea. Resilient, highly contagious.\n"
+            "\n"
+            "INT. DREAM HOTEL CORRIDOR - DAY #2#\n"
+            "\n"
+            "Gravity begins to tilt ninety degrees.\n"
+            "\n"
+            "ARTHUR\n"
+            "(whispering)\n"
+            "The kick is coming early!\n"
+            "\n"
+            "COBB ^\n"
+            "Hold your position!\n"
+            "\n"
+            "> FADE OUT. <\n"
+        )
+
+        upload_url = reverse("script-upload")
+        f_file = SimpleUploadedFile("inception.fountain", fountain_source.encode("utf-8"), content_type="text/plain")
+        res_import = self.client.post(upload_url, {"file": f_file}, format="multipart")
+        self.assertEqual(res_import.status_code, status.HTTP_201_CREATED)
+        script_id = res_import.json()["id"]
+        script = Script.objects.get(id=script_id)
+
+        # Verify TitlePage creation
+        self.assertEqual(script.title, "INCEPTION: THE DRIFT")
+        self.assertTrue(hasattr(script, "title_page"))
+        self.assertEqual(script.title_page.author, "Christopher Nolan")
+
+        # Verify Scenes & Lines
+        scenes = script.scenes.order_by("order")
+        self.assertEqual(scenes.count(), 2)
+        self.assertEqual(scenes[0].scene_number, "1")
+        self.assertEqual(scenes[1].scene_number, "2")
+        self.assertIn("Cobb stands overlooking", scenes[0].synopsis)
+
+        # 2. Test Hollywood 1/8th Page & Production Breakdown
+        breakdown_url = reverse("script-production-breakdown", kwargs={"pk": script.id})
+        res_breakdown = self.client.get(breakdown_url)
+        self.assertEqual(res_breakdown.status_code, status.HTTP_200_OK)
+        b_data = res_breakdown.json()
+
+        self.assertEqual(b_data["summary"]["total_scenes"], 2)
+        self.assertGreater(b_data["summary"]["total_eighths"], 0)
+        self.assertIn("INT_DAY", b_data["shooting_matrix"])
+        self.assertIn("EXT_NIGHT", b_data["shooting_matrix"])
+        self.assertEqual(len(b_data["cast"]), 2) # COBB & ARTHUR
+
+        # 3. Test Character Voice & Dialogue Homogenization Analyzer
+        voice_url = reverse("script-voice-analysis", kwargs={"pk": script.id})
+        res_voice = self.client.get(voice_url)
+        self.assertEqual(res_voice.status_code, status.HTTP_200_OK)
+        v_data = res_voice.json()
+
+        self.assertEqual(len(v_data["characters"]), 2)
+        cobb_v = next(c for c in v_data["characters"] if c["name"] == "COBB")
+        self.assertGreater(cobb_v["lexical_diversity_ttr"], 0)
+        self.assertIn("cadence_label", cobb_v)
+        self.assertEqual(len(v_data["similarity_matrix"]), 1)
+
+        # 4. Test Table Read Manifest Engine
+        table_read_url = reverse("script-table-read-manifest", kwargs={"pk": script.id})
+        res_tr = self.client.post(table_read_url, {
+            "narrator_voice_name": "Studio Narrator",
+            "voice_mapping": {"COBB": "voice-deep-lead", "ARTHUR": "voice-sharp-tactician"},
+        }, format="json")
+        self.assertEqual(res_tr.status_code, status.HTTP_200_OK)
+        tr_data = res_tr.json()
+
+        self.assertGreater(tr_data["summary"]["total_blocks"], 5)
+        self.assertGreater(tr_data["summary"]["estimated_runtime_seconds"], 2.0)
+        self.assertEqual(tr_data["timeline"][0]["speaker"], "Studio Narrator")
+
+        # Check vocal direction extracted from parenthetical
+        arthur_cue = next(c for c in tr_data["timeline"] if c["speaker"] == "ARTHUR" and c["direction"] == "whispering")
+        self.assertEqual(arthur_cue["emotion_hint"], "whispering")
+
+        # 5. Test Multi-Format Exports (PDF, DOCX, Fountain, FDX)
+        # PDF Export
+        res_pdf = self.client.get(reverse("script-export-pdf", kwargs={"pk": script.id}))
+        self.assertEqual(res_pdf.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_pdf["Content-Type"], "application/pdf")
+        self.assertTrue(res_pdf.content.startswith(b"%PDF-"))
+
+        # Word DOCX Export
+        res_word = self.client.get(reverse("script-export-word", kwargs={"pk": script.id}))
+        self.assertEqual(res_word.status_code, status.HTTP_200_OK)
+        self.assertTrue(res_word.content.startswith(b"PK\x03\x04"))
+
+        # Fountain Export
+        res_fountain = self.client.get(reverse("script-export-fountain", kwargs={"pk": script.id}))
+        self.assertEqual(res_fountain.status_code, status.HTTP_200_OK)
+        fountain_exported = res_fountain.content.decode("utf-8")
+        self.assertIn("Title: INCEPTION: THE DRIFT", fountain_exported)
+        self.assertIn("EXT. ROOFTOP - NIGHT #1#", fountain_exported)
+
+        # Final Draft XML (.fdx) Export & Roundtrip Re-Import
+        res_fdx = self.client.get(reverse("script-export-fdx", kwargs={"pk": script.id}))
+        self.assertEqual(res_fdx.status_code, status.HTTP_200_OK)
+        fdx_xml_str = res_fdx.content.decode("utf-8")
+        self.assertIn("<FinalDraft DocumentType=\"Script\"", fdx_xml_str)
+        self.assertIn("EXT. ROOFTOP - NIGHT", fdx_xml_str)
+
+        # Upload FDX to create another script
+        fdx_file = SimpleUploadedFile("roundtrip.fdx", res_fdx.content, content_type="application/xml")
+        res_fdx_import = self.client.post(reverse("script-upload"), {"file": fdx_file}, format="multipart")
+        self.assertEqual(res_fdx_import.status_code, status.HTTP_201_CREATED)
+        reimported_script = Script.objects.get(id=res_fdx_import.json()["id"])
+        self.assertEqual(reimported_script.scenes.count(), 2)
+
+        # 6. Test Revision Creation & History Tracking
+        rev_url = reverse("revision-list")
+        res_rev = self.client.post(rev_url, {
+            "script": script.id,
+            "color": "blue",
+            "name": "Blue Revision Draft v1.0",
+            "notes": "Verified all 6 production phases.",
+        }, format="json")
+        self.assertEqual(res_rev.status_code, status.HTTP_201_CREATED)
+        rev_id = res_rev.json()["id"]
+
+        # List revisions for this script
+        res_rev_list = self.client.get(f"{rev_url}?script={script.id}")
+        self.assertEqual(res_rev_list.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_rev_list.json()), 1)
+        self.assertEqual(res_rev_list.json()[0]["color"], "blue")
+        self.assertEqual(res_rev_list.json()[0]["name"], "Blue Revision Draft v1.0")
+
+
 
 
 

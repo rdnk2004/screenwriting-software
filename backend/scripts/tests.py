@@ -487,4 +487,26 @@ class ScreenwriterAPITests(APITestCase):
         self.assertEqual(line_types, ["scene_heading", "character", "dialogue", "action", "action"])
         self.assertEqual(scene["lines"][1]["text"], "CHOPPER")
 
+    def test_fountain_serialization_with_scene_numbers_and_notes(self):
+        from .fountain import serialize_to_fountain
+        scenes_data = [
+            {
+                "order": 0,
+                "scene_number": "10B",
+                "heading": "INT. SUBWAY CAR - NIGHT",
+                "synopsis": "The train suddenly screeches to a halt.",
+                "notes": "Ensure dim emergency red lighting.",
+                "lines": [
+                    {"order": 0, "type": "scene_heading", "text": "INT. SUBWAY CAR - NIGHT"},
+                    {"order": 1, "type": "action", "text": "Passengers grip the handrails."},
+                ]
+            }
+        ]
+        serialized = serialize_to_fountain(scenes_data)
+        self.assertIn("INT. SUBWAY CAR - NIGHT #10B#", serialized)
+        self.assertIn("= The train suddenly screeches to a halt.", serialized)
+        self.assertIn("[[ Ensure dim emergency red lighting. ]]", serialized)
+        self.assertIn("Passengers grip the handrails.", serialized)
+
+
 

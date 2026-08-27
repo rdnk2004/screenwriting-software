@@ -439,6 +439,11 @@ def serialize_to_fountain(scenes_data: list[dict], title_page_data: dict | None 
             for syn_line in synopsis.splitlines():
                 parts.append(f"= {syn_line.strip()}")
 
+        scene_notes = scene.get("notes", "").strip()
+        if scene_notes:
+            parts.append(f"[[ {scene_notes} ]]")
+
+        scene_num = scene.get("scene_number", "").strip()
         lines = sorted(scene.get("lines", []), key=lambda l: l.get("order", 0))
         prev_type = None
         for line in lines:
@@ -446,7 +451,14 @@ def serialize_to_fountain(scenes_data: list[dict], title_page_data: dict | None 
             text = line["text"]
             is_dual = line.get("is_dual_dialogue", False)
             dual_pos = line.get("dual_pos", "")
-            rendered = _render_line(ltype, text, prev_type, is_dual, dual_pos)
+            rendered = _render_line(
+                ltype,
+                text,
+                prev_type,
+                is_dual,
+                dual_pos,
+                scene_number=scene_num if ltype == "scene_heading" else "",
+            )
             parts.append(rendered)
             prev_type = ltype
 
@@ -461,10 +473,14 @@ def _render_line(
     prev_type: str | None = None,
     is_dual: bool = False,
     dual_pos: str = "",
+    scene_number: str = "",
 ) -> str:
     """Renders an individual screenplay element to Fountain syntax."""
     if ltype == "scene_heading":
-        return f"\n{text.upper()}"
+        heading_text = text.upper()
+        if scene_number and f"#{scene_number}#" not in heading_text:
+            heading_text = f"{heading_text} #{scene_number}#"
+        return f"\n{heading_text}"
     elif ltype == "action":
         prefix = "\n" if prev_type in ("dialogue", "parenthetical") else ""
         return f"{prefix}{text}"

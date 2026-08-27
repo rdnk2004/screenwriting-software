@@ -508,5 +508,78 @@ class ScreenwriterAPITests(APITestCase):
         self.assertIn("[[ Ensure dim emergency red lighting. ]]", serialized)
         self.assertIn("Passengers grip the handrails.", serialized)
 
+    def test_fountain_complex_character_names_and_lyrics(self):
+        from .fountain import parse_fountain_document
+        fountain_text = (
+            "EXT. CANTINA - NIGHT\n\n"
+            "R2-D2\n"
+            "Beep boop beep!\n\n"
+            "O'CONNER (O.S.)\n"
+            "Hold your fire!\n\n"
+            "~ The stars are shining bright tonight\n"
+            "~ Through the endless dark of space\n"
+        )
+        parsed = parse_fountain_document(fountain_text)
+        scene = parsed["scenes"][0]
+        self.assertEqual(len(scene["lines"]), 7) # heading, char, dial, char, dial, action/lyric, action/lyric
+        self.assertEqual(scene["lines"][1]["text"], "R2-D2")
+        self.assertEqual(scene["lines"][3]["text"], "O'CONNER (O.S.)")
+        self.assertEqual(scene["lines"][3]["extension"], "O.S.")
+
+    def test_fountain_multiline_title_page_contact(self):
+        from .fountain import parse_fountain_document
+        fountain_text = (
+            "Title: INCEPTION\n"
+            "Author: Christopher Nolan\n"
+            "Contact:\n"
+            "   Syncopy Inc.\n"
+            "   Los Angeles, CA 90028\n"
+            "   agent@syncopy.com\n"
+            "Notes:\n"
+            "   Draft 4.2 with VFX notes.\n\n"
+            "EXT. SHORELINE - DAY\n"
+            "Waves crash upon the rocky sand.\n"
+        )
+        parsed = parse_fountain_document(fountain_text)
+        tp = parsed["title_page"]
+        self.assertEqual(tp["title"], "INCEPTION")
+        self.assertIn("Syncopy Inc.", tp["contact"])
+        self.assertIn("agent@syncopy.com", tp["contact"])
+        self.assertIn("VFX notes", tp["notes"])
+
+    def test_fountain_end_to_end_api_import_export_roundtrip(self):
+        script = Script.objects.create(title="Roundtrip Test", owner=self.user)
+        raw_fountain = (
+            "Title: CASABLANCA\n"
+            "Author: Julius J. Epstein, Philip G. Epstein, Howard Koch\n"
+            "Draft date: 1942\n\n"
+            "INT. RICK'S CAFE - NIGHT #1#\n"
+            "= Rick sits alone at his table drinking.\n\n"
+            "RICK\n"
+            "Of all the gin joints in all the towns in all the world...\n\n"
+            "ILSA ^\n"
+            "Play it once, Sam."
+        )
+
+        import_url = reverse("script-import-fountain", kwargs={"pk": script.pk})
+        import_res = self.client.post(import_url, raw_fountain, content_type="text/plain")
+        self.assertEqual(import_res.status_code, status.HTTP_200_OK)
+
+        # Verify TitlePage created
+        script.refresh_from_db()
+        self.assertEqual(script.title_page.author, "Julius J. Epstein, Philip G. Epstein, Howard Koch")
+
+        # Export back
+        export_url = reverse("script-export-fountain", kwargs={"pk": script.pk})
+        export_res = self.client.get(export_url)
+        self.assertEqual(export_res.status_code, status.HTTP_200_OK)
+        exported_text = export_res.content.decode("utf-8")
+
+        self.assertIn("Title: CASABLANCA", exported_text)
+        self.assertIn("INT. RICK'S CAFE - NIGHT #1#", exported_text)
+        self.assertIn("= Rick sits alone at his table drinking.", exported_text)
+        self.assertIn("ILSA ^", exported_text)
+
+
 
 

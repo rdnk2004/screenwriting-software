@@ -1,40 +1,139 @@
-# pyrefly: ignore [missing-import]
+"""
+models.py — Screenplay Studio Domain Models.
+
+Defines the relational schema for screenplays, scenes, lines, characters,
+relationships, beats (story structure), title page metadata, and revision history.
+"""
 from django.db import models
-# pyrefly: ignore [missing-import]
 from django.contrib.auth.models import User
 
 
+class RevisionColor(models.TextChoices):
+    """
+    Standard Hollywood production script revision draft colors.
+    """
+    WHITE = "white", "White (First Draft)"
+    BLUE = "blue", "Blue (Second Draft)"
+    PINK = "pink", "Pink (Third Draft)"
+    YELLOW = "yellow", "Yellow (Fourth Draft)"
+    GREEN = "green", "Green (Fifth Draft)"
+    GOLDENROD = "goldenrod", "Goldenrod (Sixth Draft)"
+    BUFF = "buff", "Buff (Seventh Draft)"
+    SALMON = "salmon", "Salmon (Eighth Draft)"
+    CHERRY = "cherry", "Cherry (Ninth Draft)"
+    SECOND_WHITE = "second_white", "Second White Draft"
+
+
 class Script(models.Model):
+    """
+    Root entity representing a screenplay project.
+    """
     title = models.CharField(max_length=255, default="Untitled Script")
+    logline = models.TextField(blank=True, default="")
+    genre = models.CharField(max_length=128, blank=True, default="")
+    current_revision_color = models.CharField(
+        max_length=32,
+        choices=RevisionColor.choices,
+        default=RevisionColor.WHITE,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     owner = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="scripts"
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="scripts",
     )
 
     class Meta:
         ordering = ["-updated_at"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.title
 
 
+class TitlePage(models.Model):
+    """
+    Standard screenplay title page metadata (Fountain & Final Draft spec).
+    """
+    script = models.OneToOneField(
+        Script,
+        on_delete=models.CASCADE,
+        related_name="title_page",
+    )
+    title = models.CharField(max_length=255, blank=True, default="")
+    credit = models.CharField(max_length=255, blank=True, default="written by")
+    author = models.CharField(max_length=255, blank=True, default="")
+    source = models.CharField(max_length=255, blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+    draft_date = models.CharField(max_length=128, blank=True, default="")
+    contact = models.TextField(blank=True, default="")
+    copyright = models.CharField(max_length=255, blank=True, default="")
+
+    def __str__(self) -> str:
+        return f"Title Page for: {self.script.title}"
+
+
+class ScriptRevision(models.Model):
+    """
+    Historical draft snapshot / revision tracking model.
+    """
+    script = models.ForeignKey(
+        Script,
+        on_delete=models.CASCADE,
+        related_name="revisions",
+    )
+    color = models.CharField(
+        max_length=32,
+        choices=RevisionColor.choices,
+        default=RevisionColor.WHITE,
+    )
+    name = models.CharField(max_length=128, blank=True, default="")
+    revision_date = models.DateField(auto_now_add=True)
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.get_color_display()} - {self.name or self.revision_date} ({self.script.title})"
+
+
 class Scene(models.Model):
-    script = models.ForeignKey(Script, on_delete=models.CASCADE, related_name="scenes")
+    """
+    A single scene heading / slugline boundary in a screenplay.
+    """
+    script = models.ForeignKey(
+        Script,
+        on_delete=models.CASCADE,
+        related_name="scenes",
+    )
     order = models.PositiveIntegerField(default=0)
+    scene_number = models.CharField(max_length=32, blank=True, default="")
     heading = models.CharField(max_length=255, blank=True)
     location = models.CharField(max_length=255, blank=True)
     time_of_day = models.CharField(max_length=64, blank=True)
     pov_character = models.CharField(max_length=255, blank=True, null=True)
+    synopsis = models.TextField(blank=True, default="")
+    notes = models.TextField(blank=True, default="")
 
     class Meta:
         ordering = ["order"]
+        indexes = [
+            models.Index(fields=["script", "order"]),
+        ]
 
-    def __str__(self):
-        return f"Scene {self.order}: {self.heading}"
+    def __str__(self) -> str:
+        num_str = f" #{self.scene_number}" if self.scene_number else ""
+        return f"Scene {self.order + 1}{num_str}: {self.heading}"
 
 
 class Line(models.Model):
+    """
+    An atomic element inside a scene (Scene Heading, Action, Character, Dialogue, Parenthetical, Transition).
+    """
     class LineType(models.TextChoices):
         SCENE_HEADING = "scene_heading", "Scene Heading"
         ACTION = "action", "Action"
@@ -43,24 +142,40 @@ class Line(models.Model):
         PARENTHETICAL = "parenthetical", "Parenthetical"
         TRANSITION = "transition", "Transition"
 
-    scene = models.ForeignKey(Scene, on_delete=models.CASCADE, related_name="lines")
+    scene = models.ForeignKey(
+        Scene,
+        on_delete=models.CASCADE,
+        related_name="lines",
+    )
     order = models.PositiveIntegerField(default=0)
     type = models.CharField(
-        max_length=32, choices=LineType.choices, default=LineType.ACTION
+        max_length=32,
+        choices=LineType.choices,
+        default=LineType.ACTION,
     )
     text = models.TextField(blank=True)
     extension = models.CharField(max_length=64, blank=True, default="")
+    is_dual_dialogue = models.BooleanField(default=False)
+    dual_pos = models.CharField(max_length=16, blank=True, default="")  # 'left', 'right', or ''
 
     class Meta:
         ordering = ["order"]
+        indexes = [
+            models.Index(fields=["scene", "order"]),
+        ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"[{self.type}] {self.text[:60]}"
 
 
 class Character(models.Model):
+    """
+    A speaking character profile with backstory, goals, and visual graph coordinates.
+    """
     script = models.ForeignKey(
-        Script, on_delete=models.CASCADE, related_name="characters"
+        Script,
+        on_delete=models.CASCADE,
+        related_name="characters",
     )
     name = models.CharField(max_length=255)
     bio = models.TextField(blank=True)
@@ -75,11 +190,14 @@ class Character(models.Model):
         ordering = ["name"]
         unique_together = ["script", "name"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.script.title})"
 
 
 class Relationship(models.Model):
+    """
+    Directed relationship connection between two characters in a script.
+    """
     class RelationshipType(models.TextChoices):
         ALLY = "ally", "Ally"
         RIVAL = "rival", "Rival"
@@ -88,13 +206,19 @@ class Relationship(models.Model):
         OTHER = "other", "Other"
 
     script = models.ForeignKey(
-        Script, on_delete=models.CASCADE, related_name="relationships"
+        Script,
+        on_delete=models.CASCADE,
+        related_name="relationships",
     )
     character_a = models.ForeignKey(
-        Character, on_delete=models.CASCADE, related_name="relationships_as_a"
+        Character,
+        on_delete=models.CASCADE,
+        related_name="relationships_as_a",
     )
     character_b = models.ForeignKey(
-        Character, on_delete=models.CASCADE, related_name="relationships_as_b"
+        Character,
+        on_delete=models.CASCADE,
+        related_name="relationships_as_b",
     )
     label = models.CharField(max_length=255, blank=True)
     type = models.CharField(
@@ -107,22 +231,39 @@ class Relationship(models.Model):
     class Meta:
         ordering = ["id"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.character_a.name} -> {self.character_b.name} ({self.label})"
 
 
 class Beat(models.Model):
+    """
+    A structural story beat or index card in the Beat Board / Corkboard.
+    """
     script = models.ForeignKey(
-        Script, on_delete=models.CASCADE, related_name="beats"
+        Script,
+        on_delete=models.CASCADE,
+        related_name="beats",
     )
     name = models.CharField(max_length=255)
     order = models.IntegerField(default=0)
+    act = models.CharField(max_length=32, blank=True, default="act_1")  # act_1, act_2a, act_2b, act_3
+    emotional_polarity = models.CharField(max_length=16, blank=True, default="")  # '+', '-', '+/-'
+    synopsis = models.TextField(blank=True, default="")
+    color_tag = models.CharField(max_length=32, blank=True, default="")
+    target_page = models.FloatField(null=True, blank=True)
     linked_scene = models.ForeignKey(
-        Scene, on_delete=models.SET_NULL, null=True, blank=True, related_name="beats"
+        Scene,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="beats",
     )
 
     class Meta:
         ordering = ["order"]
+        indexes = [
+            models.Index(fields=["script", "order"]),
+        ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.order}. {self.name} ({self.script.title})"

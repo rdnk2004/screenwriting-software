@@ -25,6 +25,7 @@ from .serializers import (
 )
 from .screenplay_terms import normalize_character_name, is_valid_character_cue
 from .fountain import parse_fountain, parse_fountain_document, serialize_to_fountain
+from .fdx import parse_fdx, serialize_to_fdx
 from .exporter import export_script_to_pdf, export_script_to_word
 
 
@@ -254,6 +255,133 @@ class ScriptViewSet(viewsets.ModelViewSet):
         )
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
+
+    @action(detail=True, methods=["get"], url_path="export_fdx")
+    def export_fdx(self, request, pk=None):
+        """Return the script serialized as industry-standard Final Draft XML (.fdx)."""
+        script = self.get_object()
+
+        title_page_data = None
+        if hasattr(script, "title_page"):
+            tp = script.title_page
+            title_page_data = {
+                "title": tp.title or script.title,
+                "credit": tp.credit,
+                "author": tp.author,
+                "source": tp.source,
+                "notes": tp.notes,
+                "draft_date": tp.draft_date,
+                "contact": tp.contact,
+                "copyright": tp.copyright,
+            }
+
+        scenes_data = []
+        for scene in script.scenes.prefetch_related("lines").all().order_by("order"):
+            scenes_data.append(
+                {
+                    "order": scene.order,
+                    "scene_number": scene.scene_number,
+                    "heading": scene.heading,
+                    "location": scene.location,
+                    "time_of_day": scene.time_of_day,
+                    "pov_character": scene.pov_character,
+                    "synopsis": scene.synopsis,
+                    "notes": scene.notes,
+                    "lines": [
+                        {
+                            "order": l.order,
+                            "type": l.type,
+                            "text": l.text,
+                            "extension": l.extension,
+                            "is_dual_dialogue": l.is_dual_dialogue,
+                            "dual_pos": l.dual_pos,
+                        }
+                        for l in scene.lines.all().order_by("order")
+                    ],
+                }
+            )
+
+        fdx_text = serialize_to_fdx(scenes_data, title_page_data=title_page_data)
+        filename = f"{script.title.replace(' ', '_')}.fdx"
+        response = HttpResponse(fdx_text, content_type="application/xml; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(detail=True, methods=["post"], url_path="import_fdx")
+    def import_fdx(self, request, pk=None):
+        """
+        Replace all scenes/lines in a script from raw Final Draft XML (.fdx), updating TitlePage if present.
+
+        Body: XML payload or JSON {"xml": "..."}
+        """
+        script = self.get_object()
+
+        content_type = request.content_type or ""
+        if "application/json" in content_type:
+            fdx_content = request.data.get("xml", "")
+        else:
+            fdx_content = request.body.decode("utf-8", errors="replace")
+
+        if not fdx_content.strip():
+            return Response(
+                {"detail": "Empty FDX XML payload."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            doc_data = parse_fdx(fdx_content)
+            scenes_data = doc_data["scenes"]
+            title_page_data = doc_data.get("title_page")
+        except Exception as exc:
+            return Response(
+                {"detail": f"FDX Parse error: {exc}"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        # Update or create TitlePage if metadata exists
+        if title_page_data and any(title_page_data.values()):
+            TitlePage.objects.update_or_create(
+                script=script,
+                defaults={
+                    "title": title_page_data.get("title") or script.title,
+                    "credit": title_page_data.get("credit", "written by"),
+                    "author": title_page_data.get("author", ""),
+                    "source": title_page_data.get("source", ""),
+                    "notes": title_page_data.get("notes", ""),
+                    "draft_date": title_page_data.get("draft_date", ""),
+                    "contact": title_page_data.get("contact", ""),
+                    "copyright": title_page_data.get("copyright", ""),
+                },
+            )
+            if title_page_data.get("title") and script.title == "Untitled Script":
+                script.title = title_page_data["title"]
+                script.save(update_fields=["title"])
+
+        # Atomic replacement: delete old scenes, create new
+        script.scenes.all().delete()
+
+        for scene_data in scenes_data:
+            lines_data = scene_data.pop("lines", [])
+            scene = Scene.objects.create(script=script, **scene_data)
+            Line.objects.bulk_create(
+                [
+                    Line(
+                        scene=scene,
+                        order=l["order"],
+                        type=l["type"],
+                        text=l["text"],
+                        extension=l.get("extension", ""),
+                        is_dual_dialogue=l.get("is_dual_dialogue", False),
+                        dual_pos=l.get("dual_pos", ""),
+                    )
+                    for l in lines_data
+                ]
+            )
+
+        Script.objects.filter(pk=script.pk).update(updated_at=timezone.now())
+        script.save(update_fields=["updated_at"])
+
+        serializer = ScriptDetailSerializer(script)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], url_path="extract_characters")
     def extract_characters(self, request, pk=None):

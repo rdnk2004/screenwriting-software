@@ -732,6 +732,73 @@ class ScreenwriterAPITests(APITestCase):
         self.assertEqual(re_parsed["scenes"][0]["scene_number"], "3A")
         self.assertEqual(len(re_parsed["scenes"][0]["lines"]), 7)
 
+    def test_fdx_file_upload_endpoint(self):
+        import io
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        fdx_content = b"""<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<FinalDraft DocumentType="Script" Template="No" Version="1">
+  <TitlePage>
+    <Content>
+      <Paragraph Alignment="Center"><Text>UPLOADED FDX SCRIPT</Text></Paragraph>
+      <Paragraph Alignment="Center"><Text>Screenplay by</Text></Paragraph>
+      <Paragraph Alignment="Center"><Text>Alex River</Text></Paragraph>
+    </Content>
+  </TitlePage>
+  <Content>
+    <Paragraph Type="Scene Heading" Number="1"><Text>INT. SUBWAY - DAY</Text></Paragraph>
+    <Paragraph Type="Action"><Text>The train departs.</Text></Paragraph>
+  </Content>
+</FinalDraft>"""
+
+        uploaded = SimpleUploadedFile("sample.fdx", fdx_content, content_type="application/xml")
+        url = reverse("script-upload")
+        res = self.client.post(url, {"file": uploaded, "title": "Custom Title"}, format="multipart")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        data = res.json()
+        self.assertEqual(data["title"], "Custom Title")
+        self.assertEqual(data["title_page"]["author"], "Alex River")
+        self.assertEqual(len(data["scenes"]), 1)
+        self.assertEqual(data["scenes"][0]["heading"], "INT. SUBWAY - DAY")
+
+    def test_export_and_import_fdx_endpoints(self):
+        script = Script.objects.create(title="FDX Export Test", owner=self.user)
+        scene = Scene.objects.create(script=script, order=0, heading="EXT. ROOFTOP - DUSK", scene_number="7")
+        Line.objects.create(scene=scene, order=0, type="scene_heading", text="EXT. ROOFTOP - DUSK")
+        Line.objects.create(scene=scene, order=1, type="action", text="Wind howls across the gravel.")
+        Line.objects.create(scene=scene, order=2, type="character", text="BATMAN")
+        Line.objects.create(scene=scene, order=3, type="dialogue", text="I am the night.")
+
+        # Test Export
+        export_url = reverse("script-export-fdx", kwargs={"pk": script.pk})
+        export_res = self.client.get(export_url)
+        self.assertEqual(export_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(export_res["Content-Type"], "application/xml; charset=utf-8")
+        xml_output = export_res.content.decode("utf-8")
+        self.assertIn("<FinalDraft", xml_output)
+        self.assertIn("EXT. ROOFTOP - DUSK", xml_output)
+        self.assertIn('Number="7"', xml_output)
+        self.assertIn("BATMAN", xml_output)
+        self.assertIn("I am the night.", xml_output)
+
+        # Test Import to overwrite
+        import_xml = """<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<FinalDraft DocumentType="Script" Template="No" Version="1">
+  <Content>
+    <Paragraph Type="Scene Heading" Number="8"><Text>INT. BATCAVE - NIGHT</Text></Paragraph>
+    <Paragraph Type="Action"><Text>Computers hum.</Text></Paragraph>
+  </Content>
+</FinalDraft>"""
+        import_url = reverse("script-import-fdx", kwargs={"pk": script.pk})
+        import_res = self.client.post(import_url, import_xml, content_type="application/xml")
+        self.assertEqual(import_res.status_code, status.HTTP_200_OK)
+
+        script.refresh_from_db()
+        self.assertEqual(script.scenes.count(), 1)
+        new_scene = script.scenes.first()
+        self.assertEqual(new_scene.heading, "INT. BATCAVE - NIGHT")
+        self.assertEqual(new_scene.scene_number, "8")
+
+
 
 
 

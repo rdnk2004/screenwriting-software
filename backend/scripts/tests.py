@@ -956,6 +956,37 @@ class ScreenwriterAPITests(APITestCase):
         self.assertIn("cast", data_b)
         self.assertEqual(len(data_b["scenes"]), 1)
 
+    def test_production_eighths_multi_page_and_unnormalized_cast(self):
+        from .breakdown import generate_production_breakdown
+        script = Script.objects.create(title="Epic Production", owner=self.user)
+
+        # Scene 1: Multi-page courtroom scene
+        s1 = Scene.objects.create(script=script, order=0, heading="INT. COURTROOM - DAY", location="COURTROOM", time_of_day="DAY", scene_number="1")
+        Line.objects.create(scene=s1, order=0, type="scene_heading", text="INT. COURTROOM - DAY")
+        for i in range(1, 40):
+            if i % 2 == 1:
+                Line.objects.create(scene=s1, order=i, type="character", text="DEFENSE ATTORNEY (O.S.)" if i % 4 == 1 else "PROSECUTOR (CONT'D)")
+            else:
+                Line.objects.create(scene=s1, order=i, type="dialogue", text="Objection your honor, this testimony is completely irrelevant to the facts of the case.")
+
+        # Scene 2: Pure action montage (no cast)
+        s2 = Scene.objects.create(script=script, order=1, heading="EXT. HIGHWAY - NIGHT", location="HIGHWAY", time_of_day="NIGHT", scene_number="2")
+        Line.objects.create(scene=s2, order=0, type="scene_heading", text="EXT. HIGHWAY - NIGHT")
+        Line.objects.create(scene=s2, order=1, type="action", text="Police cruisers speed past in the torrential downpour.")
+
+        breakdown = generate_production_breakdown(script)
+
+        # Assert Scene 1 has significant eighths (multi-eighths)
+        self.assertGreater(breakdown["scenes"][0]["eighths"], 5)
+        self.assertEqual(breakdown["scenes"][1]["eighths"], 1) # Minimum 1/8th for action scene
+
+        # Assert character normalization merged extensions
+        cast_names = [c["name"] for c in breakdown["cast"]]
+        self.assertIn("DEFENSE ATTORNEY", cast_names)
+        self.assertIn("PROSECUTOR", cast_names)
+        self.assertNotIn("DEFENSE ATTORNEY (O.S.)", cast_names)
+
+
 
 
 

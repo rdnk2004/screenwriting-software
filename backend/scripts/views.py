@@ -29,6 +29,7 @@ from .fdx import parse_fdx, serialize_to_fdx
 from .exporter import export_script_to_pdf, export_script_to_word
 from .breakdown import generate_production_breakdown, format_eighths
 from .voice_analyzer import analyze_character_voices
+from .table_read import generate_table_read_manifest
 
 
 from .upload import create_script_from_upload
@@ -563,6 +564,29 @@ class ScriptViewSet(viewsets.ModelViewSet):
         script = self.get_object()
         voice_data = analyze_character_voices(script)
         return Response(voice_data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["get", "post"], url_path="table_read_manifest")
+    def table_read_manifest(self, request, pk=None):
+        """
+        Generate chronological multi-speaker audio cues manifest for Table Reads:
+        - Maps action and scene headings to Narrator
+        - Segments character dialogue cues with parenthetical vocal directions
+        - Flags spatial audio effects (V.O., O.S., Dual Dialogue)
+        - Computes duration timings and cast vocal profiles
+        """
+        script = self.get_object()
+        payload = request.data if request.method == "POST" and isinstance(request.data, dict) else {}
+        narrator_voice = payload.get("narrator_voice_name") or request.query_params.get("narrator_voice_name", "Narrator")
+        voice_mapping = payload.get("voice_mapping") or {}
+        include_action = payload.get("include_action_in_read", True)
+
+        manifest = generate_table_read_manifest(
+            script=script,
+            narrator_voice_name=narrator_voice,
+            voice_mapping=voice_mapping,
+            include_action_in_read=include_action,
+        )
+        return Response(manifest, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get"], url_path="extraction")
     def extraction(self, request, pk=None):

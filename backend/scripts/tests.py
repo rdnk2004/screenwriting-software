@@ -1027,6 +1027,60 @@ class ScreenwriterAPITests(APITestCase):
         self.assertIn("similarity_matrix", data)
         self.assertEqual(len(data["characters"]), 2)
 
+    def test_table_read_manifest_generation_and_api(self):
+        from .table_read import generate_table_read_manifest
+        script = Script.objects.create(title="Table Read Test Script", owner=self.user)
+        scene = Scene.objects.create(script=script, order=0, heading="EXT. SPACESHIP HULL - NIGHT", scene_number="1")
+        Line.objects.create(scene=scene, order=0, type="scene_heading", text="EXT. SPACESHIP HULL - NIGHT")
+        Line.objects.create(scene=scene, order=1, type="action", text="Stars glisten in the pitch black void.")
+        Line.objects.create(scene=scene, order=2, type="character", text="ASTRONAUT (V.O.)")
+        Line.objects.create(scene=scene, order=3, type="parenthetical", text="(whispering)")
+        Line.objects.create(scene=scene, order=4, type="dialogue", text="Oxygen levels are dropping fast.")
+        Line.objects.create(scene=scene, order=5, type="character", text="MISSION CONTROL (O.S.)")
+        Line.objects.create(scene=scene, order=6, type="dialogue", text="Hold on, we are rerouting the auxiliary generator.")
+
+        manifest = generate_table_read_manifest(script, narrator_voice_name="Voice-Narrator-UK")
+
+        # Summary assertions
+        summary = manifest["summary"]
+        self.assertGreater(summary["total_blocks"], 3) # Heading, Action, 2 character dialogues
+        self.assertGreater(summary["total_spoken_words"], 10)
+        self.assertGreater(summary["estimated_runtime_seconds"], 1.0)
+        self.assertIn(":", summary["estimated_runtime_formatted"])
+
+        # Timeline assertions
+        timeline = manifest["timeline"]
+        self.assertEqual(timeline[0]["speaker"], "Voice-Narrator-UK")
+        self.assertTrue(timeline[0]["is_narrator"])
+        self.assertEqual(timeline[0]["text"], "EXT. SPACESHIP HULL - NIGHT")
+
+        # Astronaut block
+        astro_block = next(b for b in timeline if b["speaker"] == "ASTRONAUT")
+        self.assertEqual(astro_block["direction"], "whispering")
+        self.assertEqual(astro_block["emotion_hint"], "whispering")
+        self.assertEqual(astro_block["audio_effect"], "intimate_voiceover")
+        self.assertEqual(astro_block["text"], "Oxygen levels are dropping fast.")
+
+        # Mission control block
+        mc_block = next(b for b in timeline if b["speaker"] == "MISSION CONTROL")
+        self.assertEqual(mc_block["audio_effect"], "spatial_offscreen")
+
+        # Roles assertions
+        role_names = [r["name"] for r in manifest["roles"]]
+        self.assertIn("Voice-Narrator-UK", role_names)
+        self.assertIn("ASTRONAUT", role_names)
+        self.assertIn("MISSION CONTROL", role_names)
+
+        # Test API Endpoint
+        url = reverse("script-table-read-manifest", kwargs={"pk": script.pk})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        api_data = res.json()
+        self.assertIn("summary", api_data)
+        self.assertIn("roles", api_data)
+        self.assertIn("timeline", api_data)
+
+
 
 
 

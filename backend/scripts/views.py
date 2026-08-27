@@ -27,6 +27,7 @@ from .screenplay_terms import normalize_character_name, is_valid_character_cue
 from .fountain import parse_fountain, parse_fountain_document, serialize_to_fountain
 from .fdx import parse_fdx, serialize_to_fdx
 from .exporter import export_script_to_pdf, export_script_to_word
+from .breakdown import generate_production_breakdown, format_eighths
 
 
 from .upload import create_script_from_upload
@@ -515,17 +516,38 @@ class ScriptViewSet(viewsets.ModelViewSet):
         most_active = sorted_by_activity[:3]
         least_active = sorted_by_activity[-3:] if len(sorted_by_activity) > 3 else []
 
+        # 5. Production Breakdown Metrics
+        prod_breakdown = generate_production_breakdown(script)
+
         return Response({
             "total_scenes": total_scenes,
             "total_dialogue_lines": total_dialogue_lines,
             "total_lines": total_lines_count,
             "estimated_total_pages": estimated_total_pages,
+            "total_eighths": prod_breakdown["summary"]["total_eighths"],
+            "total_pages_formatted": prod_breakdown["summary"]["total_pages_str"],
+            "shooting_matrix": prod_breakdown["shooting_matrix"],
             "dialogue_balance": dialogue_balance,
             "beat_breakdown": beat_breakdown,
             "locations": location_list,
             "most_active_characters": most_active,
-            "least_active_characters": least_active
+            "least_active_characters": least_active,
+            "production_summary": prod_breakdown["summary"],
         })
+
+    @action(detail=True, methods=["get"], url_path="production_breakdown")
+    def production_breakdown(self, request, pk=None):
+        """
+        Return the complete Hollywood Production Breakdown for shooting schedules:
+        - Summary metrics (eighths, pages, estimated run-time)
+        - Day/Night and INT/EXT shooting matrix
+        - Scene-by-scene production sheets with cast, eighths, and locations
+        - Set / Location breakdown with day/night distribution
+        - Cast breakdown with line counts, word counts, and screen eighths
+        """
+        script = self.get_object()
+        breakdown_data = generate_production_breakdown(script)
+        return Response(breakdown_data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get"], url_path="extraction")
     def extraction(self, request, pk=None):

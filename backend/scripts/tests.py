@@ -926,6 +926,37 @@ class ScreenwriterAPITests(APITestCase):
         self.assertEqual(matrix["INT_DAY"]["scenes"], 1)
         self.assertEqual(matrix["EXT_NIGHT"]["scenes"], 1)
 
+    def test_analysis_and_production_breakdown_endpoints(self):
+        script = Script.objects.create(title="Endpoint Test Script", owner=self.user)
+        scene = Scene.objects.create(script=script, order=0, heading="INT. CONTROL ROOM - DAY")
+        Line.objects.create(scene=scene, order=0, type="scene_heading", text="INT. CONTROL ROOM - DAY")
+        Line.objects.create(scene=scene, order=1, type="action", text="Panels flash red.")
+        Line.objects.create(scene=scene, order=2, type="character", text="COMMANDER")
+        Line.objects.create(scene=scene, order=3, type="dialogue", text="Shields at maximum.")
+
+        # Test Analysis endpoint
+        analysis_url = reverse("script-analysis", kwargs={"pk": script.pk})
+        res_a = self.client.get(analysis_url)
+        self.assertEqual(res_a.status_code, status.HTTP_200_OK)
+        data_a = res_a.json()
+        self.assertIn("total_eighths", data_a)
+        self.assertIn("total_pages_formatted", data_a)
+        self.assertIn("shooting_matrix", data_a)
+        self.assertIn("production_summary", data_a)
+
+        # Test Production Breakdown endpoint
+        breakdown_url = reverse("script-production-breakdown", kwargs={"pk": script.pk})
+        res_b = self.client.get(breakdown_url)
+        self.assertEqual(res_b.status_code, status.HTTP_200_OK)
+        data_b = res_b.json()
+        self.assertIn("summary", data_b)
+        self.assertIn("shooting_matrix", data_b)
+        self.assertIn("scenes", data_b)
+        self.assertIn("locations", data_b)
+        self.assertIn("cast", data_b)
+        self.assertEqual(len(data_b["scenes"]), 1)
+
+
 
 
 

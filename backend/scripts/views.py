@@ -28,6 +28,7 @@ from .fountain import parse_fountain, parse_fountain_document, serialize_to_foun
 from .fdx import parse_fdx, serialize_to_fdx
 from .exporter import export_script_to_pdf, export_script_to_word
 from .breakdown import generate_production_breakdown, format_eighths
+from .voice_analyzer import analyze_character_voices
 
 
 from .upload import create_script_from_upload
@@ -548,6 +549,20 @@ class ScriptViewSet(viewsets.ModelViewSet):
         script = self.get_object()
         breakdown_data = generate_production_breakdown(script)
         return Response(breakdown_data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["get"], url_path="voice_analysis")
+    def voice_analysis(self, request, pk=None):
+        """
+        Character Voice & Dialogue Homogenization Analyzer:
+        - Lexical Diversity (TTR)
+        - Words per utterance cadence
+        - Punctuation/rhetorical profiles
+        - Distinctiveness score
+        - Pairwise cross-character dialogue homogenization risk matrix
+        """
+        script = self.get_object()
+        voice_data = analyze_character_voices(script)
+        return Response(voice_data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get"], url_path="extraction")
     def extraction(self, request, pk=None):

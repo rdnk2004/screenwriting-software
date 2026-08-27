@@ -986,6 +986,49 @@ class ScreenwriterAPITests(APITestCase):
         self.assertIn("PROSECUTOR", cast_names)
         self.assertNotIn("DEFENSE ATTORNEY (O.S.)", cast_names)
 
+    def test_character_voice_distinctiveness_analysis(self):
+        from .voice_analyzer import analyze_character_voices
+        script = Script.objects.create(title="Voice Distinctiveness Test", owner=self.user)
+        scene = Scene.objects.create(script=script, order=0, heading="INT. LAB - NIGHT")
+
+        # Fast snappy character (Dr. Quick)
+        Line.objects.create(scene=scene, order=0, type="character", text="DR. QUICK")
+        Line.objects.create(scene=scene, order=1, type="dialogue", text="Look! Fast! Now! Go!")
+        Line.objects.create(scene=scene, order=2, type="character", text="DR. QUICK")
+        Line.objects.create(scene=scene, order=3, type="dialogue", text="Stop! Why?")
+
+        # Monologue / Verbose character (Professor Long)
+        Line.objects.create(scene=scene, order=4, type="character", text="PROFESSOR LONG")
+        Line.objects.create(scene=scene, order=5, type="dialogue", text="The fundamental thermodynamic equilibrium of this quantum apparatus indicates severe chronological instability.")
+        Line.objects.create(scene=scene, order=6, type="character", text="PROFESSOR LONG")
+        Line.objects.create(scene=scene, order=7, type="dialogue", text="We must systematically recalibrate the electromagnetic coils before catastrophe ensues.")
+
+        analysis = analyze_character_voices(script)
+        self.assertEqual(len(analysis["characters"]), 2)
+
+        quick_profile = next(c for c in analysis["characters"] if c["name"] == "DR. QUICK")
+        self.assertEqual(quick_profile["cadence_label"], "Snappy / Rapid")
+        self.assertLess(quick_profile["words_per_line"], 5.0)
+
+        prof_profile = next(c for c in analysis["characters"] if c["name"] == "PROFESSOR LONG")
+        self.assertEqual(prof_profile["cadence_label"], "Monologue / Verbose")
+        self.assertGreater(prof_profile["words_per_line"], 9.0)
+
+        # Check similarity matrix
+        self.assertEqual(len(analysis["similarity_matrix"]), 1)
+        self.assertEqual(analysis["similarity_matrix"][0]["homogenization_risk"], "Distinct")
+
+        # Test API endpoint
+        url = reverse("script-voice-analysis", kwargs={"pk": script.pk})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        data = res.json()
+        self.assertIn("characters", data)
+        self.assertIn("similarity_matrix", data)
+        self.assertEqual(len(data["characters"]), 2)
+
+
+
 
 
 

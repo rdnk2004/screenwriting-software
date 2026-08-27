@@ -24,7 +24,7 @@ from .serializers import (
     ScriptRevisionSerializer,
 )
 from .screenplay_terms import normalize_character_name, is_valid_character_cue
-from .fountain import parse_fountain, serialize_to_fountain
+from .fountain import parse_fountain, parse_fountain_document, serialize_to_fountain
 from .exporter import export_script_to_pdf, export_script_to_word
 
 
@@ -91,7 +91,7 @@ class ScriptViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="import_fountain")
     def import_fountain(self, request, pk=None):
         """
-        Replace all scenes/lines in a script from raw Fountain text.
+        Replace all scenes/lines in a script from raw Fountain text, and update TitlePage if present.
 
         Body: plain text (Content-Type: text/plain) or JSON {"text": "..."}
         """
@@ -109,14 +109,36 @@ class ScriptViewSet(viewsets.ModelViewSet):
                 {"detail": "Empty Fountain text."}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Parse
+        # Parse document
         try:
-            scenes_data = parse_fountain(fountain_text)
+            doc_data = parse_fountain_document(fountain_text)
+            scenes_data = doc_data["scenes"]
+            title_page_data = doc_data.get("title_page")
         except Exception as exc:
             return Response(
                 {"detail": f"Parse error: {exc}"},
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
+
+        # Update or create TitlePage if metadata exists
+        if title_page_data and any(title_page_data.values()):
+            TitlePage.objects.update_or_create(
+                script=script,
+                defaults={
+                    "title": title_page_data.get("title") or script.title,
+                    "credit": title_page_data.get("credit", "written by"),
+                    "author": title_page_data.get("author", ""),
+                    "source": title_page_data.get("source", ""),
+                    "notes": title_page_data.get("notes", ""),
+                    "draft_date": title_page_data.get("draft_date", ""),
+                    "contact": title_page_data.get("contact", ""),
+                    "copyright": title_page_data.get("copyright", ""),
+                },
+            )
+            # Update script title if title page provided a title and script is default
+            if title_page_data.get("title") and script.title == "Untitled Script":
+                script.title = title_page_data["title"]
+                script.save(update_fields=["title"])
 
         # Store beat linkage mapping before scene replacement to preserve beats
         linked_beats = list(script.beats.filter(linked_scene__isnull=False))
@@ -141,6 +163,8 @@ class ScriptViewSet(viewsets.ModelViewSet):
                         type=l["type"],
                         text=l["text"],
                         extension=l.get("extension", ""),
+                        is_dual_dialogue=l.get("is_dual_dialogue", False),
+                        dual_pos=l.get("dual_pos", ""),
                     )
                     for l in lines_data
                 ]
@@ -162,26 +186,50 @@ class ScriptViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"], url_path="export_fountain")
     def export_fountain(self, request, pk=None):
-        """Return the script serialized as Fountain plaintext."""
+        """Return the script serialized as Fountain plaintext with Title Page metadata."""
         script = self.get_object()
+
+        title_page_data = None
+        if hasattr(script, "title_page"):
+            tp = script.title_page
+            title_page_data = {
+                "title": tp.title or script.title,
+                "credit": tp.credit,
+                "author": tp.author,
+                "source": tp.source,
+                "notes": tp.notes,
+                "draft_date": tp.draft_date,
+                "contact": tp.contact,
+                "copyright": tp.copyright,
+            }
 
         scenes_data = []
         for scene in script.scenes.prefetch_related("lines").all().order_by("order"):
             scenes_data.append(
                 {
                     "order": scene.order,
+                    "scene_number": scene.scene_number,
                     "heading": scene.heading,
                     "location": scene.location,
                     "time_of_day": scene.time_of_day,
                     "pov_character": scene.pov_character,
+                    "synopsis": scene.synopsis,
+                    "notes": scene.notes,
                     "lines": [
-                        {"order": l.order, "type": l.type, "text": l.text}
+                        {
+                            "order": l.order,
+                            "type": l.type,
+                            "text": l.text,
+                            "extension": l.extension,
+                            "is_dual_dialogue": l.is_dual_dialogue,
+                            "dual_pos": l.dual_pos,
+                        }
                         for l in scene.lines.all().order_by("order")
                     ],
                 }
             )
 
-        fountain_text = serialize_to_fountain(scenes_data)
+        fountain_text = serialize_to_fountain(scenes_data, title_page_data=title_page_data)
         return HttpResponse(fountain_text, content_type="text/plain; charset=utf-8")
 
     @action(detail=True, methods=["get"], url_path="export_pdf")

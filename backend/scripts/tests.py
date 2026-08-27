@@ -388,3 +388,103 @@ class ScreenwriterAPITests(APITestCase):
         self.assertEqual(beat.emotional_polarity, "+/-")
         self.assertEqual(beat.target_page, 55.0)
 
+    def test_fountain_full_title_page_parsing(self):
+        from .fountain import parse_fountain_document, serialize_to_fountain
+        fountain_doc = (
+            "Title: THE GODFATHER\n"
+            "Credit: Screenplay by\n"
+            "Author: Mario Puzo and Francis Ford Coppola\n"
+            "Source: Based on the novel by Mario Puzo\n"
+            "Draft date: March 29, 1971\n"
+            "Contact:\n"
+            "\tParamount Pictures\n"
+            "\tHollywood, CA\n\n"
+            "INT. DON CORLEONE'S OFFICE - DAY\n\n"
+            "BONASERA\n"
+            "I believe in America.\n"
+        )
+        parsed = parse_fountain_document(fountain_doc)
+        tp = parsed["title_page"]
+        self.assertEqual(tp["title"], "THE GODFATHER")
+        self.assertEqual(tp["credit"], "Screenplay by")
+        self.assertEqual(tp["author"], "Mario Puzo and Francis Ford Coppola")
+        self.assertEqual(tp["source"], "Based on the novel by Mario Puzo")
+        self.assertEqual(tp["draft_date"], "March 29, 1971")
+        self.assertIn("Paramount Pictures", tp["contact"])
+
+        # Check scene
+        self.assertEqual(len(parsed["scenes"]), 1)
+        self.assertEqual(parsed["scenes"][0]["heading"], "INT. DON CORLEONE'S OFFICE - DAY")
+
+        # Check serialization roundtrip
+        serialized = serialize_to_fountain(parsed["scenes"], parsed["title_page"])
+        self.assertIn("Title: THE GODFATHER", serialized)
+        self.assertIn("Author: Mario Puzo and Francis Ford Coppola", serialized)
+        self.assertIn("INT. DON CORLEONE'S OFFICE - DAY", serialized)
+
+    def test_fountain_dual_dialogue_parsing_and_serialization(self):
+        from .fountain import parse_fountain_document, serialize_to_fountain
+        fountain_text = (
+            "INT. APARTMENT - NIGHT\n\n"
+            "BRICK\n"
+            "Stay out of my way!\n\n"
+            "STEEL ^\n"
+            "Make me, Brick!"
+        )
+        parsed = parse_fountain_document(fountain_text)
+        scene = parsed["scenes"][0]
+        lines = scene["lines"]
+        
+        # 1. scene_heading, 2. BRICK (left), 3. Dialogue (left), 4. STEEL (right), 5. Dialogue (right)
+        self.assertEqual(len(lines), 5)
+        self.assertEqual(lines[1]["text"], "BRICK")
+        self.assertTrue(lines[1]["is_dual_dialogue"])
+        self.assertEqual(lines[1]["dual_pos"], "left")
+
+        self.assertEqual(lines[2]["text"], "Stay out of my way!")
+        self.assertTrue(lines[2]["is_dual_dialogue"])
+        self.assertEqual(lines[2]["dual_pos"], "left")
+
+        self.assertEqual(lines[3]["text"], "STEEL")
+        self.assertTrue(lines[3]["is_dual_dialogue"])
+        self.assertEqual(lines[3]["dual_pos"], "right")
+
+        self.assertEqual(lines[4]["text"], "Make me, Brick!")
+        self.assertTrue(lines[4]["is_dual_dialogue"])
+        self.assertEqual(lines[4]["dual_pos"], "right")
+
+        # Serializer should attach caret ^ to right character
+        serialized = serialize_to_fountain(parsed["scenes"])
+        self.assertIn("STEEL ^", serialized)
+
+    def test_fountain_scene_numbers_and_synopsis(self):
+        from .fountain import parse_fountain_document
+        fountain_text = (
+            "INT. WAREHOUSE - NIGHT #14A#\n"
+            "= Jack searches for the contraband shipments.\n\n"
+            "Jack kicks open a wooden crate.\n"
+        )
+        parsed = parse_fountain_document(fountain_text)
+        scene = parsed["scenes"][0]
+        self.assertEqual(scene["heading"], "INT. WAREHOUSE - NIGHT")
+        self.assertEqual(scene["scene_number"], "14A")
+        self.assertEqual(scene["synopsis"], "Jack searches for the contraband shipments.")
+        self.assertEqual(len(scene["lines"]), 2) # heading, action
+
+    def test_fountain_forced_elements(self):
+        from .fountain import parse_fountain_document
+        fountain_text = (
+            ".TOP OF THE MOUNTAIN\n\n"
+            "@CHOPPER\n"
+            "Get to the chopper!\n\n"
+            "!ALL CAPS ACTION LINE THAT SHOULD NOT BE A CHARACTER\n\n"
+            "> SMASH CUT TO: <\n"
+        )
+        parsed = parse_fountain_document(fountain_text)
+        scene = parsed["scenes"][0]
+        self.assertEqual(scene["heading"], "TOP OF THE MOUNTAIN")
+        line_types = [l["type"] for l in scene["lines"]]
+        self.assertEqual(line_types, ["scene_heading", "character", "dialogue", "action", "action"])
+        self.assertEqual(scene["lines"][1]["text"], "CHOPPER")
+
+

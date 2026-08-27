@@ -2,8 +2,8 @@
 upload.py — Script file upload handler for Fountain, TXT, and DOCX files.
 """
 import io
-from .fountain import parse_fountain
-from .models import Script, Scene, Line
+from .fountain import parse_fountain_document
+from .models import Script, Scene, Line, TitlePage
 
 try:
     import docx
@@ -11,9 +11,9 @@ except ImportError:
     docx = None
 
 
-def parse_script_file(file_obj, filename: str) -> list[dict]:
+def parse_script_file(file_obj, filename: str) -> dict:
     """
-    Extract text or paragraphs from uploaded file object and parse into scene structure.
+    Extract text or paragraphs from uploaded file object and parse into document structure.
     Supports .fountain, .txt, and .docx.
     """
     ext = filename.lower().split(".")[-1]
@@ -30,17 +30,35 @@ def parse_script_file(file_obj, filename: str) -> list[dict]:
     if not full_text.strip():
         raise ValueError("Uploaded file is empty.")
 
-    return parse_fountain(full_text)
+    return parse_fountain_document(full_text)
 
 
 def create_script_from_upload(user, title: str, file_obj, filename: str) -> Script:
     """
-    Parse uploaded script file and create Script, Scene, and Line DB records.
+    Parse uploaded script file and create Script, TitlePage, Scene, and Line DB records.
     """
-    scenes_data = parse_script_file(file_obj, filename)
+    doc_data = parse_script_file(file_obj, filename)
+    scenes_data = doc_data.get("scenes", [])
+    title_page_data = doc_data.get("title_page", {})
 
-    clean_title = title.strip() if title and title.strip() else filename.rsplit(".", 1)[0]
+    fallback_title = filename.rsplit(".", 1)[0]
+    extracted_title = title_page_data.get("title", "").strip() if title_page_data else ""
+    clean_title = title.strip() if title and title.strip() else (extracted_title or fallback_title)
+
     script = Script.objects.create(title=clean_title, owner=user)
+
+    if title_page_data and any(title_page_data.values()):
+        TitlePage.objects.create(
+            script=script,
+            title=title_page_data.get("title") or clean_title,
+            credit=title_page_data.get("credit", "written by"),
+            author=title_page_data.get("author", ""),
+            source=title_page_data.get("source", ""),
+            notes=title_page_data.get("notes", ""),
+            draft_date=title_page_data.get("draft_date", ""),
+            contact=title_page_data.get("contact", ""),
+            copyright=title_page_data.get("copyright", ""),
+        )
 
     for scene_data in scenes_data:
         lines_data = scene_data.pop("lines", [])
@@ -53,6 +71,8 @@ def create_script_from_upload(user, title: str, file_obj, filename: str) -> Scri
                     type=l["type"],
                     text=l["text"],
                     extension=l.get("extension", ""),
+                    is_dual_dialogue=l.get("is_dual_dialogue", False),
+                    dual_pos=l.get("dual_pos", ""),
                 )
                 for l in lines_data
             ]

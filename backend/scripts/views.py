@@ -11,7 +11,7 @@ from rest_framework.decorators import action
 # pyrefly: ignore [missing-import]
 from rest_framework.response import Response
 
-from .models import Script, Scene, Line, Character, Relationship, Beat
+from .models import Script, Scene, Line, Character, Relationship, Beat, TitlePage, ScriptRevision
 from .serializers import (
     LineSerializer,
     SceneWriteSerializer,
@@ -20,6 +20,8 @@ from .serializers import (
     CharacterSerializer,
     RelationshipSerializer,
     BeatSerializer,
+    TitlePageSerializer,
+    ScriptRevisionSerializer,
 )
 from .screenplay_terms import normalize_character_name, is_valid_character_cue
 from .fountain import parse_fountain, serialize_to_fountain
@@ -515,3 +517,34 @@ class BeatViewSet(viewsets.ModelViewSet):
         if script_id:
             qs = qs.filter(script_id=script_id)
         return qs.order_by("order")
+
+
+# ---------------------------------------------------------------------------
+# TitlePage ViewSet
+# ---------------------------------------------------------------------------
+
+class TitlePageViewSet(viewsets.ModelViewSet):
+    serializer_class = TitlePageSerializer
+
+    def get_queryset(self):
+        qs = TitlePage.objects.all()
+        script_id = self.request.query_params.get("script")
+        if script_id:
+            qs = qs.filter(script_id=script_id)
+        return qs
+
+
+# ---------------------------------------------------------------------------
+# ScriptRevision ViewSet
+# ---------------------------------------------------------------------------
+
+class ScriptRevisionViewSet(viewsets.ModelViewSet):
+    serializer_class = ScriptRevisionSerializer
+
+    def get_queryset(self):
+        qs = ScriptRevision.objects.all()
+        script_id = self.request.query_params.get("script")
+        if script_id:
+            qs = qs.filter(script_id=script_id)
+        return qs.order_by("-created_at")
+

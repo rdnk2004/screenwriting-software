@@ -309,3 +309,82 @@ class ScreenwriterAPITests(APITestCase):
         self.assertNotIn("CLOSE ON", extracted_names)
         self.assertEqual(extracted.count(), 1)
         self.assertEqual(extracted.first().name, "David")
+
+    def test_title_page_crud(self):
+        from .models import TitlePage
+        script = Script.objects.create(title="Title Page Test", owner=self.user)
+        
+        # Create TitlePage via API
+        url = reverse("title_page-list")
+        data = {
+            "script": script.pk,
+            "title": "Chinatown",
+            "credit": "written by",
+            "author": "Robert Towne",
+            "source": "Original Screenplay",
+            "contact": "CAA Beverly Hills",
+            "draft_date": "October 9, 1973",
+        }
+        res = self.client.post(url, data, format="json")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(TitlePage.objects.filter(script=script).count(), 1)
+
+        tp = TitlePage.objects.get(script=script)
+        self.assertEqual(tp.title, "Chinatown")
+        self.assertEqual(tp.author, "Robert Towne")
+
+        # Retrieve Script Detail and verify nested title page
+        script_url = reverse("script-detail", kwargs={"pk": script.pk})
+        script_res = self.client.get(script_url)
+        self.assertEqual(script_res.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(script_res.json().get("title_page"))
+        self.assertEqual(script_res.json()["title_page"]["author"], "Robert Towne")
+
+    def test_script_revision_crud(self):
+        from .models import ScriptRevision, RevisionColor
+        script = Script.objects.create(title="Revision Test", owner=self.user)
+
+        url = reverse("revision-list")
+        data = {
+            "script": script.pk,
+            "color": RevisionColor.BLUE,
+            "name": "Second Draft - Blue Pages",
+            "notes": "Tightened Act II-B sequence.",
+        }
+        res = self.client.post(url, data, format="json")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(ScriptRevision.objects.filter(script=script).count(), 1)
+
+        rev = ScriptRevision.objects.get(script=script)
+        self.assertEqual(rev.color, RevisionColor.BLUE)
+        self.assertEqual(rev.get_color_display(), "Blue (Second Draft)")
+
+        # Verify in script detail
+        script_url = reverse("script-detail", kwargs={"pk": script.pk})
+        script_res = self.client.get(script_url)
+        self.assertEqual(len(script_res.json()["revisions"]), 1)
+        self.assertEqual(script_res.json()["revisions"][0]["color_display"], "Blue (Second Draft)")
+
+    def test_beat_act_and_polarity(self):
+        from .models import Beat
+        script = Script.objects.create(title="Beat Metadata Test", owner=self.user)
+
+        url = reverse("beat-list")
+        data = {
+            "script": script.pk,
+            "name": "Midpoint Climax",
+            "order": 5,
+            "act": "act_2a",
+            "emotional_polarity": "+/-",
+            "synopsis": "The protagonist gains the treasure but loses their mentor.",
+            "color_tag": "#ff6b6b",
+            "target_page": 55.0,
+        }
+        res = self.client.post(url, data, format="json")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+        beat = Beat.objects.get(script=script, name="Midpoint Climax")
+        self.assertEqual(beat.act, "act_2a")
+        self.assertEqual(beat.emotional_polarity, "+/-")
+        self.assertEqual(beat.target_page, 55.0)
+

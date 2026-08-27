@@ -9,6 +9,8 @@ from .views import (
     CharacterViewSet,
     RelationshipViewSet,
     BeatViewSet,
+    TitlePageViewSet,
+    ScriptRevisionViewSet,
 )
 
 router = DefaultRouter()
@@ -18,6 +20,8 @@ router.register(r"lines", LineViewSet, basename="line")
 router.register(r"characters", CharacterViewSet, basename="character")
 router.register(r"relationships", RelationshipViewSet, basename="relationship")
 router.register(r"beats", BeatViewSet, basename="beat")
+router.register(r"title_pages", TitlePageViewSet, basename="title_page")
+router.register(r"revisions", ScriptRevisionViewSet, basename="revision")
 
 urlpatterns = [
     path("", include(router.urls)),

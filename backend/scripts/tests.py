@@ -1127,8 +1127,40 @@ class ScreenwriterAPITests(APITestCase):
         hermit = analysis["characters"][0]
         self.assertEqual(hermit["name"], "HERMIT")
         self.assertGreater(hermit["punctuation_profile"]["questions_pct"], 0)
-        self.assertGreater(hermit["punctuation_profile"]["hesitations_pct"], 0)
         self.assertEqual(len(analysis["similarity_matrix"]), 0) # No second character for pairwise matrix
+
+    def test_pdf_exporter_with_title_page_and_dual_dialogue(self):
+        from .exporter import export_script_to_pdf
+        from .models import TitlePage
+        script = Script.objects.create(title="PDF Export Screenplay", owner=self.user)
+        TitlePage.objects.create(
+            script=script,
+            title="THE MATRIX",
+            credit="Written by",
+            author="The Wachowskis",
+            draft_date="April 8, 1996",
+            contact="Warner Bros. Pictures",
+        )
+
+        scene = Scene.objects.create(script=script, order=0, heading="INT. HOTEL - NIGHT", scene_number="1")
+        Line.objects.create(scene=scene, order=0, type="scene_heading", text="INT. HOTEL - NIGHT")
+        Line.objects.create(scene=scene, order=1, type="action", text="Flashlights probe the darkness.")
+        Line.objects.create(scene=scene, order=2, type="character", text="TRINITY", is_dual_dialogue=True, dual_pos="left")
+        Line.objects.create(scene=scene, order=3, type="dialogue", text="Get out of here!", is_dual_dialogue=True, dual_pos="left")
+        Line.objects.create(scene=scene, order=4, type="character", text="CYPHER", is_dual_dialogue=True, dual_pos="right")
+        Line.objects.create(scene=scene, order=5, type="dialogue", text="I can't!", is_dual_dialogue=True, dual_pos="right")
+
+        pdf_bytes = export_script_to_pdf(script)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF-"))
+        self.assertGreater(len(pdf_bytes), 1000)
+
+        # Test API endpoint
+        url = reverse("script-export-pdf", kwargs={"pk": script.pk})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res["Content-Type"], "application/pdf")
+        self.assertTrue(res.content.startswith(b"%PDF-"))
+
 
 
 

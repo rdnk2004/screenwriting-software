@@ -1,9 +1,11 @@
 import io
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_RIGHT, TA_LEFT
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle
+from reportlab.lib.enums import TA_RIGHT, TA_LEFT, TA_CENTER
+from reportlab.lib import colors
+
 # pyrefly: ignore [missing-import]
 from docx import Document
 # pyrefly: ignore [missing-import]
@@ -20,23 +22,29 @@ from docx.oxml.ns import qn
 # PDF Generation using ReportLab (Pure Python, Cross-Platform)
 # ---------------------------------------------------------------------------
 
-def _draw_page_number(canvas, doc):
+def _draw_page_number_factory(has_title_page: bool):
     """
-    Draws header page number '2.' in top-right corner on pages 2+.
+    Returns a canvas callback for drawing standard screenplay header page numbers.
     """
-    if doc.page > 1:
-        canvas.saveState()
-        canvas.setFont("Courier", 12)
-        # 1.0 inch from right edge, 0.75 inch from top edge
-        x = 8.5 * inch - 1.0 * inch
-        y = 11.0 * inch - 0.75 * inch
-        canvas.drawRightString(x, y, f"{doc.page}.")
-        canvas.restoreState()
+    def _callback(canvas, doc):
+        # Calculate actual screenplay script page
+        script_page = (doc.page - 1) if has_title_page else doc.page
+        if script_page > 1:
+            canvas.saveState()
+            canvas.setFont("Courier", 12)
+            # 1.0 inch from right edge, 0.75 inch from top edge
+            x = 8.5 * inch - 1.0 * inch
+            y = 11.0 * inch - 0.75 * inch
+            canvas.drawRightString(x, y, f"{script_page}.")
+            canvas.restoreState()
+
+    return _callback
 
 
 def export_script_to_pdf(script) -> bytes:
     """
-    Renders script lines into a paginated screenplay-format PDF byte stream.
+    Renders script lines and optional Title Page into a paginated screenplay-format PDF byte stream.
+    Supports Title Page cover formatting and side-by-side Dual Dialogue rendering.
     """
     buffer = io.BytesIO()
     
@@ -120,6 +128,82 @@ def export_script_to_pdf(script) -> bytes:
         spaceBefore=12,
         spaceAfter=12,
     )
+
+    # Title Page Styles
+    style_tp_title = ParagraphStyle(
+        'TPTitle',
+        fontName='Courier-Bold',
+        fontSize=18,
+        leading=22,
+        alignment=TA_CENTER,
+        spaceBefore=0,
+        spaceAfter=12,
+    )
+    style_tp_credit = ParagraphStyle(
+        'TPCredit',
+        fontName='Courier',
+        fontSize=12,
+        leading=16,
+        alignment=TA_CENTER,
+        spaceBefore=12,
+        spaceAfter=6,
+    )
+    style_tp_author = ParagraphStyle(
+        'TPAuthor',
+        fontName='Courier',
+        fontSize=13,
+        leading=16,
+        alignment=TA_CENTER,
+        spaceBefore=6,
+        spaceAfter=12,
+    )
+    style_tp_source = ParagraphStyle(
+        'TPSource',
+        fontName='Courier-Oblique',
+        fontSize=11,
+        leading=14,
+        alignment=TA_CENTER,
+        spaceBefore=6,
+        spaceAfter=12,
+    )
+    style_tp_bottom = ParagraphStyle(
+        'TPBottom',
+        fontName='Courier',
+        fontSize=10,
+        leading=13,
+        alignment=TA_LEFT,
+        spaceBefore=4,
+        spaceAfter=0,
+    )
+
+    # Dual Dialogue Table Styles
+    style_dual_char = ParagraphStyle(
+        'DualChar',
+        fontName='Courier-Bold',
+        fontSize=11,
+        leading=13,
+        alignment=TA_CENTER,
+        spaceBefore=6,
+        spaceAfter=0,
+    )
+    style_dual_paren = ParagraphStyle(
+        'DualParen',
+        fontName='Courier',
+        fontSize=10,
+        leading=12,
+        alignment=TA_CENTER,
+        spaceBefore=0,
+        spaceAfter=0,
+    )
+    style_dual_dial = ParagraphStyle(
+        'DualDial',
+        fontName='Courier',
+        fontSize=11,
+        leading=13,
+        alignment=TA_LEFT,
+        spaceBefore=0,
+        spaceAfter=4,
+    )
     
     style_map = {
         "scene_heading": style_heading,
@@ -131,31 +215,125 @@ def export_script_to_pdf(script) -> bytes:
     }
 
     story = []
+    has_title_page = False
+
+    # 1. Build Title Page if metadata exists
+    title_page = getattr(script, "title_page", None)
+    if title_page and (title_page.title or title_page.author or title_page.contact):
+        has_title_page = True
+        story.append(Spacer(1, 2.5 * inch))
+        title_text = (title_page.title or script.title).upper()
+        story.append(Paragraph(title_text, style_tp_title))
+        
+        credit_text = title_page.credit or "written by"
+        story.append(Paragraph(credit_text, style_tp_credit))
+
+        author_text = title_page.author or "Anonymous"
+        story.append(Paragraph(author_text, style_tp_author))
+
+        if title_page.source:
+            story.append(Paragraph(title_page.source, style_tp_source))
+
+        story.append(Spacer(1, 3.2 * inch))
+
+        if title_page.draft_date:
+            story.append(Paragraph(f"Draft Date: {title_page.draft_date}", style_tp_bottom))
+        if title_page.contact:
+            for line in title_page.contact.splitlines():
+                if line.strip():
+                    story.append(Paragraph(line.strip(), style_tp_bottom))
+        if title_page.copyright:
+            story.append(Paragraph(title_page.copyright, style_tp_bottom))
+
+        story.append(PageBreak())
+
+    # 2. Build Screenplay Scenes and Dual Dialogue
     scenes = sorted(script.scenes.prefetch_related("lines").all(), key=lambda s: s.order)
     is_first = True
     
     for scene in scenes:
         lines = sorted(scene.lines.all(), key=lambda l: l.order)
-        for line in lines:
+        idx = 0
+
+        while idx < len(lines):
+            line = lines[idx]
+
+            # Check for Dual Dialogue block (starting with left)
+            if line.is_dual_dialogue and line.dual_pos == "left":
+                left_flowables = []
+                right_flowables = []
+
+                # Collect left speaker lines
+                while idx < len(lines) and lines[idx].is_dual_dialogue and lines[idx].dual_pos == "left":
+                    l_item = lines[idx]
+                    esc_text = l_item.text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    if l_item.type == "character":
+                        left_flowables.append(Paragraph(esc_text.upper(), style_dual_char))
+                    elif l_item.type == "parenthetical":
+                        left_flowables.append(Paragraph(esc_text, style_dual_paren))
+                    else:
+                        left_flowables.append(Paragraph(esc_text, style_dual_dial))
+                    idx += 1
+
+                # Collect right speaker lines
+                while idx < len(lines) and lines[idx].is_dual_dialogue and lines[idx].dual_pos == "right":
+                    r_item = lines[idx]
+                    esc_text = r_item.text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    if r_item.type == "character":
+                        right_flowables.append(Paragraph(esc_text.upper(), style_dual_char))
+                    elif r_item.type == "parenthetical":
+                        right_flowables.append(Paragraph(esc_text, style_dual_paren))
+                    else:
+                        right_flowables.append(Paragraph(esc_text, style_dual_dial))
+                    idx += 1
+
+                # Render side-by-side 2-column Table
+                dual_table = Table(
+                    [[left_flowables, right_flowables]],
+                    colWidths=[2.85 * inch, 2.85 * inch],
+                )
+                dual_table.setStyle(
+                    TableStyle([
+                        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                        ('TOPPADDING', (0, 0), (-1, -1), 4),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ])
+                )
+                story.append(dual_table)
+                is_first = False
+                continue
+
+            # Standard line
             st = style_map.get(line.type, style_action)
-            
+            raw_text = line.text
+
+            # Scene heading with scene number
+            if line.type == "scene_heading" and scene.scene_number and f"#{scene.scene_number}#" not in raw_text:
+                raw_text = f"{raw_text} #{scene.scene_number}#"
+
             # Escape HTML characters for ReportLab XML rendering
             text_escaped = (
-                line.text.replace("&", "&amp;")
+                raw_text.replace("&", "&amp;")
                 .replace("<", "&lt;")
                 .replace(">", "&gt;")
             )
             
-            if is_first:
+            if is_first and not has_title_page:
                 # Remove space before top line on page 1
                 first_style = ParagraphStyle('FirstStyle', parent=st, spaceBefore=0)
                 story.append(Paragraph(text_escaped, first_style))
                 is_first = False
             else:
                 story.append(Paragraph(text_escaped, st))
+                is_first = False
+
+            idx += 1
 
     # Build PDF with page numbers on later pages
-    doc.build(story, onFirstPage=lambda c, d: None, onLaterPages=_draw_page_number)
+    page_callback = _draw_page_number_factory(has_title_page)
+    doc.build(story, onFirstPage=lambda c, d: None, onLaterPages=page_callback)
     
     pdf_bytes = buffer.getvalue()
     buffer.close()

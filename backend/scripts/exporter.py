@@ -367,7 +367,8 @@ def add_page_number(run):
 
 def export_script_to_word(script) -> bytes:
     """
-    Renders script lines into a formatted Word (.docx) file.
+    Renders script lines and optional Title Page into a formatted Word (.docx) file.
+    Supports Title Page cover formatting and side-by-side Dual Dialogue tables.
     """
     doc = Document()
     
@@ -392,6 +393,76 @@ def export_script_to_word(script) -> bytes:
     header_run.font.size = Pt(12)
     add_page_number(header_run)
     header_p.add_run(".")
+
+    has_title_page = False
+    title_page = getattr(script, "title_page", None)
+
+    # 1. Render Title Page if metadata exists
+    if title_page and (title_page.title or title_page.author or title_page.contact):
+        has_title_page = True
+        
+        # Title (centered, bold, 18pt)
+        p_title = doc.add_paragraph()
+        p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_title.paragraph_format.space_before = Pt(180)
+        p_title.paragraph_format.space_after = Pt(12)
+        r_title = p_title.add_run((title_page.title or script.title).upper())
+        r_title.font.name = 'Courier New'
+        r_title.font.size = Pt(18)
+        r_title.font.bold = True
+
+        # Credit
+        p_credit = doc.add_paragraph()
+        p_credit.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_credit.paragraph_format.space_before = Pt(12)
+        p_credit.paragraph_format.space_after = Pt(6)
+        r_credit = p_credit.add_run(title_page.credit or "written by")
+        r_credit.font.name = 'Courier New'
+        r_credit.font.size = Pt(12)
+
+        # Author
+        p_author = doc.add_paragraph()
+        p_author.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_author.paragraph_format.space_before = Pt(6)
+        p_author.paragraph_format.space_after = Pt(12)
+        r_author = p_author.add_run(title_page.author or "Anonymous")
+        r_author.font.name = 'Courier New'
+        r_author.font.size = Pt(13)
+
+        if title_page.source:
+            p_source = doc.add_paragraph()
+            p_source.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p_source.paragraph_format.space_before = Pt(6)
+            p_source.paragraph_format.space_after = Pt(12)
+            r_source = p_source.add_run(title_page.source)
+            r_source.font.name = 'Courier New'
+            r_source.font.size = Pt(11)
+            r_source.font.italic = True
+
+        # Bottom metadata block
+        p_bottom = doc.add_paragraph()
+        p_bottom.paragraph_format.space_before = Pt(200)
+        p_bottom.paragraph_format.space_after = Pt(0)
+        p_bottom.paragraph_format.line_spacing = 1.1
+
+        bottom_lines = []
+        if title_page.draft_date:
+            bottom_lines.append(f"Draft Date: {title_page.draft_date}")
+        if title_page.contact:
+            bottom_lines.extend(title_page.contact.splitlines())
+        if title_page.copyright:
+            bottom_lines.append(title_page.copyright)
+
+        for bl in bottom_lines:
+            if bl.strip():
+                p_b = doc.add_paragraph()
+                p_b.paragraph_format.space_before = Pt(2)
+                p_b.paragraph_format.space_after = Pt(0)
+                r_b = p_b.add_run(bl.strip())
+                r_b.font.name = 'Courier New'
+                r_b.font.size = Pt(10)
+
+        doc.add_page_break()
     
     def add_paragraph_element(text, element_type):
         p = doc.add_paragraph()
@@ -452,12 +523,89 @@ def export_script_to_word(script) -> bytes:
     
     for scene in scenes:
         lines = sorted(scene.lines.all(), key=lambda l: l.order)
-        for line in lines:
-            p = add_paragraph_element(line.text, line.type)
-            if is_first:
-                # Page 1 top line has zero space_before
+        idx = 0
+
+        while idx < len(lines):
+            line = lines[idx]
+
+            # Check for Dual Dialogue block in Word
+            if line.is_dual_dialogue and line.dual_pos == "left":
+                left_lines = []
+                right_lines = []
+
+                while idx < len(lines) and lines[idx].is_dual_dialogue and lines[idx].dual_pos == "left":
+                    left_lines.append(lines[idx])
+                    idx += 1
+
+                while idx < len(lines) and lines[idx].is_dual_dialogue and lines[idx].dual_pos == "right":
+                    right_lines.append(lines[idx])
+                    idx += 1
+
+                # Create 1-row, 2-column Table
+                table = doc.add_table(rows=1, cols=2)
+                table.autofit = False
+                table.columns[0].width = Inches(2.9)
+                table.columns[1].width = Inches(2.9)
+
+                # Populate Left Column
+                cell_left = table.cell(0, 0)
+                cell_left.width = Inches(2.9)
+                p_l = cell_left.paragraphs[0]
+                for l_idx, l_line in enumerate(left_lines):
+                    if l_idx > 0:
+                        p_l = cell_left.add_paragraph()
+                    p_l.paragraph_format.space_before = Pt(0)
+                    p_l.paragraph_format.space_after = Pt(2)
+                    if l_line.type == "character":
+                        p_l.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        r = p_l.add_run(l_line.text.upper())
+                        r.font.bold = True
+                    elif l_line.type == "parenthetical":
+                        p_l.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        r = p_l.add_run(l_line.text)
+                    else:
+                        p_l.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        r = p_l.add_run(l_line.text)
+                    r.font.name = 'Courier New'
+                    r.font.size = Pt(10)
+
+                # Populate Right Column
+                cell_right = table.cell(0, 1)
+                cell_right.width = Inches(2.9)
+                p_r = cell_right.paragraphs[0]
+                for r_idx, r_line in enumerate(right_lines):
+                    if r_idx > 0:
+                        p_r = cell_right.add_paragraph()
+                    p_r.paragraph_format.space_before = Pt(0)
+                    p_r.paragraph_format.space_after = Pt(2)
+                    if r_line.type == "character":
+                        p_r.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        r = p_r.add_run(r_line.text.upper())
+                        r.font.bold = True
+                    elif r_line.type == "parenthetical":
+                        p_r.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        r = p_r.add_run(r_line.text)
+                    else:
+                        p_r.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        r = p_r.add_run(r_line.text)
+                    r.font.name = 'Courier New'
+                    r.font.size = Pt(10)
+
+                is_first = False
+                continue
+
+            text_to_render = line.text
+            if line.type == "scene_heading" and scene.scene_number and f"#{scene.scene_number}#" not in text_to_render:
+                text_to_render = f"{text_to_render} #{scene.scene_number}#"
+
+            p = add_paragraph_element(text_to_render, line.type)
+            if is_first and not has_title_page:
                 p.paragraph_format.space_before = Pt(0)
                 is_first = False
+            else:
+                is_first = False
+
+            idx += 1
                 
     # Save document to memory stream
     file_stream = io.BytesIO()

@@ -1161,6 +1161,39 @@ class ScreenwriterAPITests(APITestCase):
         self.assertEqual(res["Content-Type"], "application/pdf")
         self.assertTrue(res.content.startswith(b"%PDF-"))
 
+    def test_word_exporter_with_title_page_and_dual_dialogue(self):
+        from .exporter import export_script_to_word
+        from .models import TitlePage
+        script = Script.objects.create(title="Word Export Screenplay", owner=self.user)
+        TitlePage.objects.create(
+            script=script,
+            title="INTERSTELLAR",
+            credit="Written by",
+            author="Jonathan Nolan and Christopher Nolan",
+            draft_date="2014",
+            contact="Syncopy Inc.",
+        )
+
+        scene = Scene.objects.create(script=script, order=0, heading="EXT. TESSERACT - CONTINUOUS", scene_number="99")
+        Line.objects.create(scene=scene, order=0, type="scene_heading", text="EXT. TESSERACT - CONTINUOUS")
+        Line.objects.create(scene=scene, order=1, type="action", text="Infinite streams of time converge.")
+        Line.objects.create(scene=scene, order=2, type="character", text="COOPER", is_dual_dialogue=True, dual_pos="left")
+        Line.objects.create(scene=scene, order=3, type="dialogue", text="Make him stay, Murph!", is_dual_dialogue=True, dual_pos="left")
+        Line.objects.create(scene=scene, order=4, type="character", text="TARS", is_dual_dialogue=True, dual_pos="right")
+        Line.objects.create(scene=scene, order=5, type="dialogue", text="Cooper, they didn't bring us here to change the past.", is_dual_dialogue=True, dual_pos="right")
+
+        docx_bytes = export_script_to_word(script)
+        # DOCX zip magic header PK\x03\x04
+        self.assertTrue(docx_bytes.startswith(b"PK\x03\x04"))
+        self.assertGreater(len(docx_bytes), 1000)
+
+        # Test API endpoint
+        url = reverse("script-export-word", kwargs={"pk": script.pk})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(res.content.startswith(b"PK\x03\x04"))
+
+
 
 
 

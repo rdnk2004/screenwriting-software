@@ -63,15 +63,21 @@ def _parse_heading_details(heading: str) -> tuple[str, str, str, str]:
         raw = raw[:num_match.start()].strip()
 
     # Location & time of day parsing
-    parts_match = _RE_HEADING_PARTS.match(raw)
-    if parts_match:
-        location = parts_match.group(2).strip()
-        time_of_day = parts_match.group(3).strip()
-    else:
-        location = raw
-        time_of_day = ""
+    m_pref = _RE_SCENE_HEADING.match(raw)
+    body = raw[m_pref.end():].strip() if m_pref else raw
 
-    return raw, scene_number, location, time_of_day
+    if " - " in body:
+        location, time_of_day = body.rsplit(" - ", 1)
+    elif " – " in body:
+        location, time_of_day = body.rsplit(" – ", 1)
+    elif " — " in body:
+        location, time_of_day = body.rsplit(" — ", 1)
+    elif "-" in body:
+        location, time_of_day = body.rsplit("-", 1)
+    else:
+        location, time_of_day = body, ""
+
+    return raw, scene_number, location.strip(), time_of_day.strip()
 
 
 def parse_title_page(lines: list[str]) -> tuple[dict, int]:

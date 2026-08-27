@@ -580,6 +580,120 @@ class ScreenwriterAPITests(APITestCase):
         self.assertIn("= Rick sits alone at his table drinking.", exported_text)
         self.assertIn("ILSA ^", exported_text)
 
+    def test_fdx_parser_full_document(self):
+        from .fdx import parse_fdx
+        sample_fdx = """<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<FinalDraft DocumentType="Script" Template="No" Version="1">
+  <TitlePage>
+    <Content>
+      <Paragraph Alignment="Center">
+        <Text>BLADE RUNNER</Text>
+      </Paragraph>
+      <Paragraph Alignment="Center">
+        <Text>Screenplay by</Text>
+      </Paragraph>
+      <Paragraph Alignment="Center">
+        <Text>Hampton Fancher and David Peoples</Text>
+      </Paragraph>
+    </Content>
+  </TitlePage>
+  <Content>
+    <Paragraph Type="Scene Heading" Number="1">
+      <SceneProperties>
+        <SceneNumber>1</SceneNumber>
+      </SceneProperties>
+      <Text>EXT. LOS ANGELES - 2019 - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>A vast cityscape of smoke and industrial fires extends into the horizon.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>DECKARD</Text>
+    </Paragraph>
+    <Paragraph Type="Parenthetical">
+      <Text>(lighting a cigarette)</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>They don't advertise for killers in the newspaper.</Text>
+    </Paragraph>
+    <Paragraph Type="Transition">
+      <Text>DISSOLVE TO:</Text>
+    </Paragraph>
+  </Content>
+</FinalDraft>"""
+
+        parsed = parse_fdx(sample_fdx)
+        tp = parsed["title_page"]
+        self.assertEqual(tp["title"], "BLADE RUNNER")
+        self.assertEqual(tp["author"], "Hampton Fancher and David Peoples")
+
+        scenes = parsed["scenes"]
+        self.assertEqual(len(scenes), 1)
+        scene = scenes[0]
+        self.assertEqual(scene["heading"], "EXT. LOS ANGELES - 2019 - NIGHT")
+        self.assertEqual(scene["scene_number"], "1")
+        self.assertEqual(scene["time_of_day"], "NIGHT")
+
+        lines = scene["lines"]
+        self.assertEqual(len(lines), 6)
+        self.assertEqual(lines[0]["type"], "scene_heading")
+        self.assertEqual(lines[1]["type"], "action")
+        self.assertEqual(lines[2]["type"], "character")
+        self.assertEqual(lines[3]["type"], "parenthetical")
+        self.assertEqual(lines[4]["type"], "dialogue")
+        self.assertEqual(lines[5]["type"], "transition")
+
+    def test_fdx_parser_dual_dialogue(self):
+        from .fdx import parse_fdx
+        sample_fdx = """<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<FinalDraft DocumentType="Script" Template="No" Version="1">
+  <Content>
+    <Paragraph Type="Scene Heading">
+      <Text>INT. CONTROL ROOM - DAY</Text>
+    </Paragraph>
+    <DualDialogue>
+      <Paragraph Type="Character">
+        <Text>PILOT A</Text>
+      </Paragraph>
+      <Paragraph Type="Dialogue">
+        <Text>Pull up now!</Text>
+      </Paragraph>
+      <Paragraph Type="Character">
+        <Text>PILOT B</Text>
+      </Paragraph>
+      <Paragraph Type="Dialogue">
+        <Text>Engines are jammed!</Text>
+      </Paragraph>
+    </DualDialogue>
+  </Content>
+</FinalDraft>"""
+
+        parsed = parse_fdx(sample_fdx)
+        scene = parsed["scenes"][0]
+        lines = scene["lines"]
+        self.assertEqual(len(lines), 5) # heading + 4 dual dialogue lines
+        
+        # Left speaker
+        self.assertTrue(lines[1]["is_dual_dialogue"])
+        self.assertEqual(lines[1]["dual_pos"], "left")
+        self.assertTrue(lines[2]["is_dual_dialogue"])
+        self.assertEqual(lines[2]["dual_pos"], "left")
+
+        # Right speaker
+        self.assertTrue(lines[3]["is_dual_dialogue"])
+        self.assertEqual(lines[3]["dual_pos"], "right")
+        self.assertTrue(lines[4]["is_dual_dialogue"])
+        self.assertEqual(lines[4]["dual_pos"], "right")
+
+    def test_fdx_parser_error_handling(self):
+        from .fdx import parse_fdx
+        with self.assertRaises(ValueError):
+            parse_fdx("<NotFinalDraft></NotFinalDraft>")
+        
+        with self.assertRaises(ValueError):
+            parse_fdx("THIS IS NOT XML AT ALL")
+
+
 
 
 

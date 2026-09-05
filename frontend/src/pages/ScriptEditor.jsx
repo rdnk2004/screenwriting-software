@@ -18,9 +18,10 @@ const ELEMENT_TYPES = [
   { id: "scene_heading", label: "Scene Heading", shortcut: "Ctrl+Alt+1", prefix: "INT. " },
   { id: "action", label: "Action", shortcut: "Ctrl+Alt+2", prefix: "" },
   { id: "character", label: "Character", shortcut: "Ctrl+Alt+3", prefix: "" },
-  { id: "dialogue", label: "Dialogue", shortcut: "Ctrl+Alt+4", prefix: "" },
   { id: "parenthetical", label: "Parenthetical", shortcut: "Ctrl+Alt+5", prefix: "(" },
+  { id: "dialogue", label: "Dialogue", shortcut: "Ctrl+Alt+4", prefix: "" },
   { id: "transition", label: "Transition", shortcut: "Ctrl+Alt+6", prefix: "CUT TO:" },
+  { id: "centered", label: "Centered", shortcut: "Ctrl+Alt+7", prefix: "> ", suffix: " <" },
 ];
 
 export default function ScriptEditor() {
@@ -32,6 +33,7 @@ export default function ScriptEditor() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
   const [error, setError] = useState(null);
+  const [isDirty, setIsDirty] = useState(false);
 
   // Glossary Drawer & Ribbon State
   const [showGlossary, setShowGlossary] = useState(false);
@@ -45,6 +47,7 @@ export default function ScriptEditor() {
   const [editorView, setEditorView] = useState(null);
 
   const textRef = useRef("");
+  const autoSaveTimerRef = useRef(null);
 
   // Load script
   useEffect(() => {
@@ -71,32 +74,69 @@ export default function ScriptEditor() {
 
     return () => {
       active = false;
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
     };
   }, [id]);
 
-  const handleEditorChange = useCallback((text) => {
-    textRef.current = text;
-  }, []);
+  const performSave = async (silent = false) => {
+    if (!silent) setStatus("Saving…");
+    try {
+      await importFountain(id, textRef.current);
+      setIsDirty(false);
+      setStatus(silent ? "Autosaved ✓" : "Saved ✓");
+      setTimeout(() => setStatus(""), 2000);
+      return true;
+    } catch (e) {
+      setStatus("Error: " + (e.response?.data?.detail || e.message));
+      return false;
+    }
+  };
+
+  const handleEditorChange = useCallback(
+    (text) => {
+      textRef.current = text;
+      setIsDirty(true);
+
+      // Debounced 1.5s autosave
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+      autoSaveTimerRef.current = setTimeout(() => {
+        performSave(true);
+      }, 1500);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [id]
+  );
 
   const handleCursorChange = useCallback((cursorStats) => {
     setStats(cursorStats);
   }, []);
 
-  const handleSave = async () => {
-    setStatus("Saving…");
-    try {
-      await importFountain(id, textRef.current);
-      setStatus("Saved ✓");
-      setTimeout(() => setStatus(""), 2000);
-    } catch (e) {
-      setStatus("Error: " + (e.response?.data?.detail || e.message));
+  const handleManualSave = async () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
     }
+    await performSave(false);
+  };
+
+  const handleSafeNavigate = async (path) => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    if (isDirty) {
+      setStatus("Saving before leaving…");
+      await performSave(true);
+    }
+    navigate(path);
   };
 
   const handleExportPdf = async () => {
     setStatus("Exporting PDF…");
     try {
-      await importFountain(id, textRef.current);
+      await performSave(true);
       await exportPdf(id, `${title || "script"}.pdf`);
       setStatus("Exported PDF ✓");
       setTimeout(() => setStatus(""), 2000);
@@ -108,7 +148,7 @@ export default function ScriptEditor() {
   const handleExportWord = async () => {
     setStatus("Exporting Word…");
     try {
-      await importFountain(id, textRef.current);
+      await performSave(true);
       await exportWord(id, `${title || "script"}.docx`);
       setStatus("Exported Word ✓");
       setTimeout(() => setStatus(""), 2000);
@@ -140,14 +180,18 @@ export default function ScriptEditor() {
     }
   };
 
-  const handleInsertMarkup = (symbol) => {
+  const handleInsertMarkup = (symbolLeft, symbolRight = symbolLeft) => {
     if (!editorView) return;
     const { state } = editorView;
     const sel = state.selection.main;
     const selectedText = state.sliceDoc(sel.from, sel.to);
-    const wrapped = `${symbol}${selectedText || "text"}${symbol}`;
+    const wrapped = `${symbolLeft}${selectedText || "text"}${symbolRight}`;
     editorView.dispatch({
       changes: { from: sel.from, to: sel.to, insert: wrapped },
+      selection: {
+        anchor: sel.from + symbolLeft.length,
+        head: sel.from + symbolLeft.length + (selectedText.length || 4),
+      },
     });
     editorView.focus();
   };
@@ -166,7 +210,7 @@ export default function ScriptEditor() {
   const handleKeyDown = (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
       e.preventDefault();
-      handleSave();
+      handleManualSave();
     }
   };
 
@@ -176,7 +220,7 @@ export default function ScriptEditor() {
     return (
       <div className="dashboard-container">
         <p style={{ color: "#f87171", padding: "2rem 0" }}>{error}</p>
-        <button className="btn" onClick={() => navigate("/")}>
+        <button className="btn" onClick={() => handleSafeNavigate("/")}>
           ← Back to Dashboard
         </button>
       </div>
@@ -185,11 +229,11 @@ export default function ScriptEditor() {
 
   return (
     <div className="editor-layout" onKeyDown={handleKeyDown}>
-      {/* MS Word Top Header Bar */}
+      {/* Top Header Bar */}
       <div className="editor-toolbar">
         <button
           className="btn"
-          onClick={() => navigate("/")}
+          onClick={() => handleSafeNavigate("/")}
           style={{ padding: "0.35rem 0.75rem", fontSize: "0.85rem" }}
         >
           ← Dashboard
@@ -205,8 +249,12 @@ export default function ScriptEditor() {
         />
 
         <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
-          <button className="btn btn-primary" onClick={handleSave} title="Save Script (Ctrl+S)">
-            💾 Save
+          <button
+            className={`btn ${isDirty ? "btn-primary" : ""}`}
+            onClick={handleManualSave}
+            title="Save Script (Ctrl+S)"
+          >
+            💾 Save {isDirty ? "●" : ""}
           </button>
           <button className="btn" onClick={handleExportPdf} title="Export PDF Document">
             📄 Export PDF
@@ -225,16 +273,16 @@ export default function ScriptEditor() {
           >
             📖 Guide
           </button>
-          <button className="btn" onClick={() => navigate(`/scripts/${id}/characters`)}>
+          <button className="btn" onClick={() => handleSafeNavigate(`/scripts/${id}/characters`)}>
             🎭 Characters
           </button>
-          <button className="btn" onClick={() => navigate(`/scripts/${id}/diagram`)}>
+          <button className="btn" onClick={() => handleSafeNavigate(`/scripts/${id}/diagram`)}>
             🕸️ Map
           </button>
-          <button className="btn" onClick={() => navigate(`/scripts/${id}/outline`)}>
+          <button className="btn" onClick={() => handleSafeNavigate(`/scripts/${id}/outline`)}>
             📋 Outline
           </button>
-          <button className="btn" onClick={() => navigate(`/scripts/${id}/analysis`)}>
+          <button className="btn" onClick={() => handleSafeNavigate(`/scripts/${id}/analysis`)}>
             📊 Analysis
           </button>
         </div>
@@ -246,7 +294,7 @@ export default function ScriptEditor() {
         )}
       </div>
 
-      {/* MS Word Office Ribbon Container */}
+      {/* Screenplay Ribbon Bar */}
       <div className="word-ribbon-container">
         {/* Ribbon Tab Selectors */}
         <div className="ribbon-tabs">
@@ -274,7 +322,7 @@ export default function ScriptEditor() {
         <div className="ribbon-content">
           {activeTab === "elements" && (
             <div className="ribbon-group">
-              <span className="ribbon-label">Format Element (Tab to Cycle):</span>
+              <span className="ribbon-label">Screenplay Format (Tab to Cycle):</span>
               <div className="ribbon-buttons">
                 {ELEMENT_TYPES.map((elem) => {
                   const isActive = stats.lineType === elem.id;
@@ -329,6 +377,13 @@ export default function ScriptEditor() {
                 </button>
                 <button
                   className="ribbon-btn"
+                  onClick={() => handleInsertMarkup("> ", " <")}
+                  title="Centered Text (> text <)"
+                >
+                  Centered
+                </button>
+                <button
+                  className="ribbon-btn"
                   onClick={handleToggleUppercase}
                   title="Uppercase Current Line (Ctrl+Shift+U)"
                 >
@@ -359,6 +414,13 @@ export default function ScriptEditor() {
                   title="Insert CUT TO: prefix"
                 >
                   + CUT TO:
+                </button>
+                <button
+                  className="ribbon-btn"
+                  onClick={() => handleInsertPrefix("(")}
+                  title="Insert Parenthetical"
+                >
+                  + (
                 </button>
               </div>
             </div>
@@ -400,11 +462,11 @@ export default function ScriptEditor() {
         </div>
       </div>
 
-      {/* Screenplay Paper Workspace (MS Word Studio Environment) */}
+      {/* Screenplay Paper Workspace */}
       <div className="editor-desk">
         {loading ? (
           <p style={{ color: "#94a3b8", padding: "4rem", textAlign: "center" }}>
-            Loading screenplay document into Word editor…
+            Loading screenplay document…
           </p>
         ) : (
           <div
@@ -415,7 +477,7 @@ export default function ScriptEditor() {
               transition: "transform 0.15s ease-out",
             }}
           >
-            {/* MS Word Horizontal Ruler */}
+            {/* Horizontal Screenplay Ruler */}
             {showRuler && <WordRuler activeType={stats.lineType} />}
 
             {/* Pristine 8.5" x 11" Screenplay Paper Document */}
@@ -431,7 +493,7 @@ export default function ScriptEditor() {
         )}
       </div>
 
-      {/* MS Word Professional Status Bar */}
+      {/* Screenplay Professional Status Bar */}
       <div className="word-status-bar">
         <div className="status-left">
           <span>
@@ -449,7 +511,7 @@ export default function ScriptEditor() {
 
         <div className="status-center">
           <span>
-            <strong>Tab</strong>: Cycle &nbsp;•&nbsp; <strong>Enter</strong>: Smart Flow &nbsp;•&nbsp; <strong>Ctrl+Alt+1..6</strong>: Elements
+            <strong>Tab</strong>: Cycle &nbsp;•&nbsp; <strong>Enter</strong>: Smart Flow &nbsp;•&nbsp; <strong>Ctrl+Alt+1..7</strong>: Elements
           </span>
         </div>
 

@@ -299,7 +299,7 @@ def parse_fountain_document(text: str) -> dict:
         if centered_match:
             in_dialogue_block = False
             current_dual_state = (False, "")
-            add_line("action", centered_match.group(1).strip())
+            add_line("action", f">{centered_match.group(1).strip()}<")
             continue
 
         forced_trans = _RE_TRANSITION_FORCED.match(trimmed)

@@ -129,6 +129,16 @@ def export_script_to_pdf(script) -> bytes:
         spaceAfter=12,
     )
 
+    style_centered = ParagraphStyle(
+        'ScreenplayCentered',
+        fontName='Courier-Bold',
+        fontSize=12,
+        leading=14,
+        alignment=TA_CENTER,
+        spaceBefore=14,
+        spaceAfter=10,
+    )
+
     # Title Page Styles
     style_tp_title = ParagraphStyle(
         'TPTitle',
@@ -308,6 +318,11 @@ def export_script_to_pdf(script) -> bytes:
             # Standard line
             st = style_map.get(line.type, style_action)
             raw_text = line.text
+
+            # Centered action text
+            if line.type == "action" and raw_text.startswith(">") and raw_text.endswith("<") and len(raw_text) > 2:
+                st = style_centered
+                raw_text = raw_text[1:-1].strip()
 
             # Scene heading with scene number
             if line.type == "scene_heading" and scene.scene_number and f"#{scene.scene_number}#" not in raw_text:
@@ -503,6 +518,17 @@ def export_script_to_word(script) -> bytes:
             p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
             p.paragraph_format.space_before = Pt(12)
             p.paragraph_format.space_after = Pt(12)
+        elif element_type == "action" and text.startswith(">") and text.endswith("<") and len(text) > 2:
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.paragraph_format.left_indent = Inches(0)
+            p.paragraph_format.right_indent = Inches(0)
+            p.paragraph_format.space_before = Pt(14)
+            p.paragraph_format.space_after = Pt(10)
+            run = p.add_run(text[1:-1].strip())
+            run.font.name = 'Courier New'
+            run.font.size = Pt(12)
+            run.font.bold = True
+            return p
         else:
             p.paragraph_format.left_indent = Inches(0)
             p.paragraph_format.space_before = Pt(6)

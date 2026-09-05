@@ -635,41 +635,64 @@ button {
 
 .fountain-scene-heading {
   text-transform: uppercase;
-  font-weight: bold;
-  margin-top: 1.6em !important;
-  margin-bottom: 0.3em !important;
+  font-weight: 700;
+  color: #000000;
+  margin-top: 1.8em !important;
+  margin-bottom: 0.4em !important;
+  letter-spacing: 0.02em;
 }
 
 .fountain-character {
   text-transform: uppercase;
-  font-weight: bold;
+  font-weight: 700;
+  color: #000000;
   margin-left: 2.2in !important;
-  margin-top: 1.1em !important;
+  margin-top: 1.2em !important;
   margin-bottom: 0 !important;
+  letter-spacing: 0.04em;
 }
 
 .fountain-dialogue {
   margin-left: 1.0in !important;
   margin-right: 1.0in !important;
-  margin-bottom: 0.4em !important;
+  margin-top: 0.1em !important;
+  margin-bottom: 0.5em !important;
+  line-height: 1.45 !important;
+  color: #111827;
 }
 
 .fountain-parenthetical {
   margin-left: 1.5in !important;
   margin-right: 1.5in !important;
-  margin-bottom: 0.2em !important;
+  margin-top: 0.1em !important;
+  margin-bottom: 0.1em !important;
+  font-style: italic;
+  color: #374151;
 }
 
 .fountain-transition {
   text-transform: uppercase;
+  font-weight: 700;
   text-align: right;
-  margin-top: 1.2em !important;
-  margin-bottom: 0.4em !important;
+  margin-top: 1.4em !important;
+  margin-bottom: 0.6em !important;
+  letter-spacing: 0.03em;
+}
+
+.fountain-centered {
+  text-align: center !important;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin-top: 1.4em !important;
+  margin-bottom: 0.8em !important;
+  color: #000000;
 }
 
 .fountain-action {
   margin-top: 0.8em !important;
-  margin-bottom: 0.3em !important;
+  margin-bottom: 0.4em !important;
+  line-height: 1.45 !important;
+  color: #111827;
 }
 
 /* Page Break Divider Widget */

@@ -7,6 +7,7 @@ const ELEMENT_INDENTS = {
   dialogue: { left: 2.5, right: 6.5, label: "Dialogue Block" },
   parenthetical: { left: 3.0, right: 6.0, label: "Parenthetical Delivery" },
   transition: { left: 5.5, right: 7.5, label: "Transition (Right Aligned)" },
+  centered: { left: 2.5, right: 6.5, label: "Centered Text" },
 };
 
 export default function WordRuler({ activeType = "action" }) {
